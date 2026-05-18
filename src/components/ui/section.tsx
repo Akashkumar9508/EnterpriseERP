@@ -20,7 +20,7 @@ const sectionVariants = cva("", {
 
 interface SectionProps
   extends React.ComponentProps<"section">,
-    VariantProps<typeof sectionVariants> {}
+  VariantProps<typeof sectionVariants> { }
 
 function Section({ className, variant, ...props }: SectionProps) {
   return (

@@ -6,7 +6,7 @@ import type { VariantProps } from 'class-variance-authority';
 
 interface FormFieldProps
   extends React.ComponentProps<'input'>,
-    VariantProps<typeof inputVariants> {
+  VariantProps<typeof inputVariants> {
   /** Label text shown above the input */
   label: string;
   /** Optional lucide-react (or any) icon rendered on the left inside the input */

@@ -21,7 +21,7 @@ const pageVariants = cva(
 
 interface PageProps
   extends React.ComponentProps<"main">,
-    VariantProps<typeof pageVariants> {}
+  VariantProps<typeof pageVariants> { }
 
 function Page({ className, variant, ...props }: PageProps) {
   return (

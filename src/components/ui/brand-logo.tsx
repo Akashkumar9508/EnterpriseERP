@@ -24,7 +24,7 @@ function BrandLogo({ className, size, ...props }: BrandLogoProps) {
       <div className="icon flex items-center justify-center rounded bg-blue-600 shadow-lg shadow-blue-500/20">
         <div className="h-5 w-5 rounded-sm border-2 border-white" />
       </div>
-      <h1 className="name font-bold tracking-tight drop-shadow-md">
+      <h1 className="name font-bold tracking-tight drop-shadow-md group-data-[collapsible=icon]:hidden">
         Interprise<span className="text-blue-400">ERP</span>
       </h1>
     </div>
