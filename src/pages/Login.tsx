@@ -9,6 +9,7 @@ import { BrandLogo } from '@/components/ui/brand-logo';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowRight, Eye, EyeOff, Lock, User } from 'lucide-react';
+import axiosClient from '../Services/axiosClient';
 
 type LoginForm = { username: string; password: string };
 
@@ -16,9 +17,23 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { isSubmitting } } = useForm<LoginForm>();
-  const onSubmit = async () => {
-    await new Promise(r => setTimeout(r, 1500));
-    navigate('/home');
+
+  const onSubmit = async (data: LoginForm) => {
+    try {
+      const response: any = await axiosClient.post('/Auth/login', data);
+      if (response && response.success) {
+        localStorage.setItem('userData', JSON.stringify(response.data));
+        if (response.data && response.data.token) {
+          localStorage.setItem('bteowkeelnl', response.data.token);
+        }
+        navigate('/home');
+      } else {
+        alert(response?.message || 'Invalid username or password');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      alert(error?.message || 'Something went wrong during login');
+    }
   };
 
   return (
