@@ -35,15 +35,17 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { BrandLogo } from "./ui/brand-logo"
-import { useAuth } from "@/context/AuthContext"
+import { useAppDispatch, useAppSelector } from "@/store/hooks"
+import { logout } from "@/store/slices/authSlice"
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { sidebar, user, logout } = useAuth();
+  const dispatch = useAppDispatch();
+  const { sidebar, user } = useAppSelector((state) => state.auth);
 
   const handleLogout = () => {
-    logout();
+    dispatch(logout());
     navigate("/");
   };
 
@@ -69,7 +71,7 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-zinc-500 font-semibold tracking-widest text-[10px] uppercase mb-1">Menus</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {sidebar.sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
+              {[...sidebar].sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
                 // If the item doesn't have a specific route but has children, it's a collapsible
                 const hasSubmenu = item.children && item.children.length > 0;
                 // For active state, we can check if current path starts with item route (if not null) or if any child is active
@@ -119,7 +121,7 @@ export function AppSidebar() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <SidebarMenuSub className="border-black/10 dark:border-white/10 mr-0 pr-0 mt-1">
-                          {item.children.sort((a, b) => a.sortOrder - b.sortOrder).map((subItem) => {
+                          {[...item.children].sort((a, b) => a.sortOrder - b.sortOrder).map((subItem) => {
                             const isSubActive = location.pathname === subItem.route;
                             
                             // Specific check if the menu item is "Logout" to wire up handleLogout directly

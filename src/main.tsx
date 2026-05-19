@@ -6,18 +6,19 @@ import "./index.css"
 import App from "./App.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { AuthProvider } from "@/context/AuthContext.tsx"
+import { Provider } from 'react-redux';
+import { store } from '@/store/store';
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
-      <AuthProvider>
+      <Provider store={store}>
         <ThemeProvider>
           <TooltipProvider>
             <App />
           </TooltipProvider>
         </ThemeProvider>
-      </AuthProvider>
+      </Provider>
     </BrowserRouter>
   </StrictMode>
 )

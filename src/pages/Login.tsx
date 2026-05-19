@@ -10,29 +10,32 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowRight, Eye, EyeOff, Lock, User } from 'lucide-react';
 import axiosClient from '../Services/axiosClient';
+import { useAppDispatch } from '@/store/hooks';
+import { setAuthData } from '@/store/slices/authSlice';
+import { toast } from 'sonner';
 
 type LoginForm = { username: string; password: string };
 
 export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { register, handleSubmit, formState: { isSubmitting } } = useForm<LoginForm>();
 
   const onSubmit = async (data: LoginForm) => {
     try {
       const response: any = await axiosClient.post('/Auth/login', data);
       if (response && response.success) {
-        localStorage.setItem('userData', JSON.stringify(response.data));
-        if (response.data && response.data.token) {
-          localStorage.setItem('bteowkeelnl', response.data.token);
-        }
+        // Dispatch all user data and token to the Redux store
+        dispatch(setAuthData(response.data));
+        toast.success('Login successful!');
         navigate('/home');
       } else {
-        alert(response?.message || 'Invalid username or password');
+        toast.error(response?.message || 'Invalid username or password');
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      alert(error?.message || 'Something went wrong during login');
+      toast.error(error?.message || 'Something went wrong during login');
     }
   };
 
