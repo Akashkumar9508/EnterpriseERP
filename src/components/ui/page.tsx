@@ -4,13 +4,13 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const pageVariants = cva(
-  "min-h-screen text-white overflow-hidden",
+  "min-h-screen text-foreground overflow-hidden",
   {
     variants: {
       variant: {
-        default: "bg-[#0a0a0c] p-8",
-        split: "bg-[#0a0a0c] flex",
-        dashboard: "bg-[#0a0a0c] flex flex-col",
+        default: "bg-background p-4 md:p-6",
+        split: "bg-background flex",
+        dashboard: "bg-background flex flex-col",
       },
     },
     defaultVariants: {

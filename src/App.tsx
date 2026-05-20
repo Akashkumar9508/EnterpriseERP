@@ -1,13 +1,22 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
+import ManagePage from '@/pages/ManagePage';
+import ManageRole from '@/pages/ManageRole';
+import ManageMenu from '@/pages/ManageMenu';
+import ManageRoleMenu from '@/pages/ManageRoleMenu';
+import ManageStaff from '@/pages/ManageStaff';
+import ManageStaffLogin from '@/pages/ManageStaffLogin';
+import ChangePassword from '@/pages/ChangePassword';
 import Layout from '@/components/layout';
-import { useAuth } from '@/context/AuthContext';
+import { useAppSelector } from '@/store/hooks';
+import { Toaster } from '@/components/ui/sonner';
 
 export function App() {
-  const { isAuthenticated } = useAuth();
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
 
   return (
+    <>
     <Routes>
       <Route 
         path="/" 
@@ -21,6 +30,13 @@ export function App() {
             <Layout>
               <Routes>
                 <Route path="home" element={<Home />} />
+                <Route path="manage-page" element={<ManagePage />} />
+                <Route path="manage-role" element={<ManageRole />} />
+                <Route path="manage-menu" element={<ManageMenu />} />
+                <Route path="manage-role-menu" element={<ManageRoleMenu />} />
+                <Route path="manage-staff" element={<ManageStaff />} />
+                <Route path="manage-staff-login" element={<ManageStaffLogin />} />
+                <Route path="change-password" element={<ChangePassword />} />
                 {/* Fallback for routes that haven't been created yet */}
                 <Route 
                   path="*" 
@@ -39,6 +55,8 @@ export function App() {
         }
       />
     </Routes>
+    <Toaster position="bottom-right" richColors />
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE = "https://localhost:44387";
+const API_BASE = "http://localhost:5262";
 // const API_BASE = "https://webapi.wellnesshospital.org";
 
 export const IMAGE_BASE = `${API_BASE}/uploads/`;
