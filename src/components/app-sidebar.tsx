@@ -6,7 +6,8 @@ import {
   Sparkles,
   BadgeCheck,
   Bell,
-  Circle
+  Circle,
+  Key
 } from "lucide-react"
 import * as Icons from "lucide-react"
 import {
@@ -215,6 +216,10 @@ export function AppSidebar() {
                   <DropdownMenuItem className="cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-foreground">
                     <Bell className="mr-2 h-4 w-4" />
                     Notifications
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/change-password")} className="cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-foreground">
+                    <Key className="mr-2 h-4 w-4" />
+                    Change Password
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator className="bg-border" />

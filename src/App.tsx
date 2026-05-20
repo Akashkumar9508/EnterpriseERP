@@ -7,6 +7,7 @@ import ManageMenu from '@/pages/ManageMenu';
 import ManageRoleMenu from '@/pages/ManageRoleMenu';
 import ManageStaff from '@/pages/ManageStaff';
 import ManageStaffLogin from '@/pages/ManageStaffLogin';
+import ChangePassword from '@/pages/ChangePassword';
 import Layout from '@/components/layout';
 import { useAppSelector } from '@/store/hooks';
 import { Toaster } from '@/components/ui/sonner';
@@ -35,6 +36,7 @@ export function App() {
                 <Route path="manage-role-menu" element={<ManageRoleMenu />} />
                 <Route path="manage-staff" element={<ManageStaff />} />
                 <Route path="manage-staff-login" element={<ManageStaffLogin />} />
+                <Route path="change-password" element={<ChangePassword />} />
                 {/* Fallback for routes that haven't been created yet */}
                 <Route 
                   path="*" 
