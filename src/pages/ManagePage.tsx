@@ -41,7 +41,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { data } from 'react-router-dom';
 
 export default function ManagePage() {
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-page');
