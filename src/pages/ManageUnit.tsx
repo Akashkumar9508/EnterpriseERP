@@ -26,7 +26,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Pagination,
   PaginationContent,
@@ -34,51 +34,48 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination';
 import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
-import { useAppSelector } from '@/store/hooks';
-import type { RoleDto } from '@/types/RoleDto';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
+import type { UnitDto } from '@/types/UnitDto';
 
-export default function ManageRole() {
-  const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-role');
-  const user = useAppSelector((state) => state.auth.user);
-  
-  const [roles, setRoles] = useState<RoleDto[]>([]);
+export default function ManageUnit() {
+  const { canView, canCreate, canEdit, canDelete } = usePermissions('/unit');
+
+  const [units, setUnits] = useState<UnitDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Pagination & Search state
+
+  // Pagination & Search state (handled locally since API is simple)
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
-  const [totalCount, setTotalCount] = useState(0);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<RoleDto>();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<UnitDto>();
 
-  const fetchRoles = async () => {
+  const fetchUnits = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Role', {
-        params: { pageNumber, pageSize, search }
-      });
+      const response: any = await axiosClient.get('/Unit');
       if (response?.success) {
-        if (response.data && response.data.items) {
-          setRoles(response.data.items);
-          setTotalCount(response.data.totalCount || 0);
-        } else {
-          setRoles(response.data || []);
-          setTotalCount((response.data || []).length);
-        }
+        setUnits(response.data || []);
       }
     } catch (error) {
-      console.error('Failed to fetch roles', error);
+      console.error('Failed to fetch units', error);
+      toast.error('Failed to load units.');
     } finally {
       setIsLoading(false);
     }
@@ -86,80 +83,80 @@ export default function ManageRole() {
 
   useEffect(() => {
     if (canView) {
-      fetchRoles();
+      fetchUnits();
     }
-  }, [canView, pageNumber, pageSize]);
+  }, [canView]);
+
+  // Client-side search filtering
+  const filteredUnits = units.filter((unit) => {
+    const searchLower = search.toLowerCase();
+    return (
+      unit.name.toLowerCase().includes(searchLower) ||
+      (unit.symbol && unit.symbol.toLowerCase().includes(searchLower))
+    );
+  });
+
+  // Client-side pagination
+  const totalCount = filteredUnits.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const paginatedUnits = filteredUnits.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
 
   useEffect(() => {
-    if (canView) {
-      const delayDebounceFn = setTimeout(() => {
-        if (pageNumber === 1) {
-          fetchRoles();
-        } else {
-          setPageNumber(1);
-        }
-      }, 500);
-
-      return () => clearTimeout(delayDebounceFn);
-    }
-  }, [search]);
+    setPageNumber(1);
+  }, [search, pageSize]);
 
   const openCreateDialog = () => {
-    reset({ name: '', code: '', description: '', isActive: true });
+    reset({ name: '', symbol: '', decimalAllowed: false });
     setEditingId(null);
     setIsDialogOpen(true);
   };
 
-  const openEditDialog = (role: RoleDto) => {
-    reset({ 
-      name: role.name, 
-      code: role.code || '', 
-      description: role.description || '', 
-      isActive: role.isActive ?? true 
+  const openEditDialog = (unit: UnitDto) => {
+    reset({
+      name: unit.name,
+      symbol: unit.symbol || '',
+      decimalAllowed: unit.decimalAllowed ?? false,
     });
-    setEditingId(role.id || null);
+    setEditingId(unit.id || null);
     setIsDialogOpen(true);
   };
 
-  const onSubmit = async (data: RoleDto) => {
+  const onSubmit = async (data: UnitDto) => {
     try {
-      const payload = { ...data, companyId: user?.companyId };
       let response: any;
-      
       if (editingId) {
-        payload.id = editingId;
-        response = await axiosClient.put('/Role', payload);
+        response = await axiosClient.put('/Unit', { ...data, id: editingId });
       } else {
-        response = await axiosClient.post('/Role', payload);
+        response = await axiosClient.post('/Unit', data);
       }
-      
+
       if (response?.success) {
         setIsDialogOpen(false);
-        toast.success(editingId ? 'Role updated successfully!' : 'Role created successfully!');
-        fetchRoles();
+        toast.success(editingId ? 'Unit updated successfully!' : 'Unit created successfully!');
+        fetchUnits();
       } else {
-        toast.error(response?.message || 'Failed to save role');
+        toast.error(response?.message || 'Failed to save unit');
       }
     } catch (error: any) {
       console.error('Save error', error);
-      toast.error(error?.message || 'An error occurred while saving the role.');
+      toast.error(error?.message || 'An error occurred while saving the unit.');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this role?')) return;
-    
+    if (!confirm('Are you sure you want to delete this unit?')) return;
+
     try {
-      const response: any = await axiosClient.delete(`/Role/${id}`);
+      const response: any = await axiosClient.delete(`/Unit/${id}`);
       if (response?.success) {
-        toast.success('Role deleted successfully!');
-        fetchRoles();
+        toast.success('Unit deleted successfully!');
+        fetchUnits();
       } else {
-        toast.error(response?.message || 'Failed to delete role');
+        toast.error(response?.message || 'Failed to delete unit');
       }
     } catch (error: any) {
       console.error('Delete error', error);
-      toast.error(error?.message || 'An error occurred while deleting the role.');
+      toast.error(error?.message || 'An error occurred while deleting the unit.');
     }
   };
 
@@ -178,20 +175,20 @@ export default function ManageRole() {
     <Page>
       <Section className="mb-4 flex justify-between items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Manage Roles</h1>
-          <p className="text-muted-foreground mt-1">Configure user roles and system access.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Units of Measurement</h1>
+          <p className="text-muted-foreground mt-1">Configure and manage system product units (UOM).</p>
         </div>
         <div className="flex items-center gap-4 flex-1 justify-end">
-          <Input 
-            type="search" 
-            placeholder="Search roles..." 
+          <Input
+            type="search"
+            placeholder="Search units..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-[300px]"
           />
           {canCreate && (
             <Button onClick={openCreateDialog} className="gap-2 shrink-0">
-              <Plus className="h-4 w-4" /> Add Role
+              <Plus className="h-4 w-4" /> Add Unit
             </Button>
           )}
         </div>
@@ -203,58 +200,72 @@ export default function ManageRole() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="w-[80px]">Sr. No.</TableHead>
-                <TableHead className="w-[200px]">Role Name</TableHead>
-                <TableHead className="w-[150px]">Code</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="w-[100px]">Status</TableHead>
+                <TableHead className="w-[250px]">Unit Name</TableHead>
+                <TableHead className="w-[200px]">Symbol</TableHead>
+                <TableHead>Decimal Allowed</TableHead>
                 {(canEdit || canDelete) && <TableHead className="text-right w-[120px]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={5} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : roles.length === 0 ? (
+              ) : paginatedUnits.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    No roles found.
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    No units found.
                   </TableCell>
                 </TableRow>
               ) : (
-                roles.map((role, index) => (
-                  <TableRow key={role.id}>
+                paginatedUnits.map((unit, index) => (
+                  <TableRow key={unit.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
                     </TableCell>
-                    <TableCell className="font-medium">{role.name}</TableCell>
+                    <TableCell className="font-medium">{unit.name}</TableCell>
                     <TableCell>
-                      {role.code ? (
+                      {unit.symbol ? (
                         <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">
-                          {role.code}
+                          {unit.symbol}
                         </code>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-[300px] truncate">
-                      {role.description || '-'}
+                      ) : (
+                        '-'
+                      )}
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${role.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                        {role.isActive ? 'Active' : 'Inactive'}
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-medium ${
+                          unit.decimalAllowed
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400'
+                        }`}
+                      >
+                        {unit.decimalAllowed ? 'Allowed' : 'Not Allowed'}
                       </span>
                     </TableCell>
                     {(canEdit || canDelete) && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {canEdit && (
-                            <Button variant="ghost" size="icon" onClick={() => openEditDialog(role)} title="Edit">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditDialog(unit)}
+                              title="Edit"
+                            >
                               <Pencil className="h-4 w-4 text-blue-500" />
                             </Button>
                           )}
-                          {canDelete && role.id && (
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(role.id!)} title="Delete">
+                          {canDelete && unit.id && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(unit.id!)}
+                              title="Delete"
+                            >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           )}
@@ -267,16 +278,15 @@ export default function ManageRole() {
             </TableBody>
           </Table>
         </div>
-        
+
         {totalCount > 0 && (
           <div className="py-4 px-6 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <p>Rows per page</p>
-              <Select 
-                value={pageSize.toString()} 
+              <Select
+                value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
-                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
@@ -295,19 +305,25 @@ export default function ManageRole() {
             <Pagination className="mx-0 w-auto">
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationPrevious 
-                    href="#" 
-                    onClick={(e) => { e.preventDefault(); if(pageNumber > 1) setPageNumber(pageNumber - 1); }} 
-                    className={pageNumber === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pageNumber > 1) setPageNumber(pageNumber - 1);
+                    }}
+                    className={pageNumber === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                   />
                 </PaginationItem>
-                
-                {Array.from({ length: Math.ceil(totalCount / pageSize) }, (_, i) => i + 1).map((page) => (
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <PaginationItem key={page}>
-                    <PaginationLink 
-                      href="#" 
+                    <PaginationLink
+                      href="#"
                       isActive={pageNumber === page}
-                      onClick={(e) => { e.preventDefault(); setPageNumber(page); }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setPageNumber(page);
+                      }}
                     >
                       {page}
                     </PaginationLink>
@@ -315,10 +331,13 @@ export default function ManageRole() {
                 ))}
 
                 <PaginationItem>
-                  <PaginationNext 
-                    href="#" 
-                    onClick={(e) => { e.preventDefault(); if(pageNumber < Math.ceil(totalCount / pageSize)) setPageNumber(pageNumber + 1); }} 
-                    className={pageNumber >= Math.ceil(totalCount / pageSize) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pageNumber < totalPages) setPageNumber(pageNumber + 1);
+                    }}
+                    className={pageNumber >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                   />
                 </PaginationItem>
               </PaginationContent>
@@ -330,46 +349,49 @@ export default function ManageRole() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Role' : 'Create New Role'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Edit Unit' : 'Create New Unit'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
             <FormField
-              label="Role Name"
-              placeholder="e.g. Administrator"
-              {...register('name', { required: 'Role name is required' })}
+              label="Unit Name"
+              placeholder="e.g. Kilogram"
+              {...register('name', { required: 'Unit name is required' })}
             />
             {errors.name && <span className="text-xs text-red-500">{errors.name.message}</span>}
 
             <FormField
-              label="Role Code (Optional)"
-              placeholder="e.g. ADMIN"
-              {...register('code')}
+              label="Symbol"
+              placeholder="e.g. KG"
+              {...register('symbol', { required: 'Symbol is required' })}
             />
-            
-            <FormField
-              label="Description (Optional)"
-              placeholder="e.g. Full system access"
-              {...register('description')}
-            />
+            {errors.symbol && <span className="text-xs text-red-500">{errors.symbol.message}</span>}
 
             <div className="flex items-center space-x-2 pt-2 pb-2">
               <Switch
-                id="isActive"
-                checked={watch('isActive')}
-                onCheckedChange={(val) => setValue('isActive', val)}
+                id="decimalAllowed"
+                checked={watch('decimalAllowed')}
+                onCheckedChange={(val) => setValue('decimalAllowed', val)}
               />
-              <label htmlFor="isActive" className="text-sm font-medium leading-none cursor-pointer">
-                Is Active
+              <label
+                htmlFor="decimalAllowed"
+                className="text-sm font-medium leading-none cursor-pointer"
+              >
+                Decimal Allowed (e.g. fractional quantities)
               </label>
             </div>
-            
+
             <DialogFooter className="mt-6 pt-4 border-t border-border">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Role
+                Save Unit
               </Button>
             </DialogFooter>
           </form>

@@ -8,6 +8,15 @@ import ManageRoleMenu from '@/pages/ManageRoleMenu';
 import ManageStaff from '@/pages/ManageStaff';
 import ManageStaffLogin from '@/pages/ManageStaffLogin';
 import ChangePassword from '@/pages/ChangePassword';
+import ManageUnit from '@/pages/ManageUnit';
+import ManageCategory from '@/pages/ManageCategory';
+import ManageDesignation from '@/pages/ManageDesignation';
+import ManageDepartment from '@/pages/ManageDepartment';
+import ManageGST from '@/pages/ManageGST';
+import ManageCompany from '@/pages/ManageCompany';
+import ManageState from '@/pages/ManageState';
+import ManageCity from '@/pages/ManageCity';
+import ManageProduct from '@/pages/ManageProduct';
 import Layout from '@/components/layout';
 import { useAppSelector } from '@/store/hooks';
 import { Toaster } from '@/components/ui/sonner';
@@ -37,6 +46,15 @@ export function App() {
                 <Route path="manage-staff" element={<ManageStaff />} />
                 <Route path="manage-staff-login" element={<ManageStaffLogin />} />
                 <Route path="change-password" element={<ChangePassword />} />
+                <Route path="unit" element={<ManageUnit />} />
+                <Route path="category" element={<ManageCategory />} />
+                <Route path="manage-designation" element={<ManageDesignation />} />
+                <Route path="manage-department" element={<ManageDepartment />} />
+                <Route path="manage-gst" element={<ManageGST />} />
+                <Route path="manage-company" element={<ManageCompany />} />
+                <Route path="manage-state" element={<ManageState />} />
+                <Route path="manage-city" element={<ManageCity />} />
+                <Route path="product" element={<ManageProduct />} />
                 {/* Fallback for routes that haven't been created yet */}
                 <Route 
                   path="*" 

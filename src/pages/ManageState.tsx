@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Pencil, Trash2, Plus, Loader2 } from 'lucide-react';
+import { Pencil, Trash2, Plus, Loader2, Map } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -26,7 +27,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Pagination,
   PaginationContent,
@@ -34,51 +35,47 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination';
 import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
-import { useAppSelector } from '@/store/hooks';
-import type { RoleDto } from '@/types/RoleDto';
 import { toast } from 'sonner';
-import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
+import type { StateDto } from '@/types/StateDto';
 
-export default function ManageRole() {
-  const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-role');
-  const user = useAppSelector((state) => state.auth.user);
-  
-  const [roles, setRoles] = useState<RoleDto[]>([]);
+export default function ManageState() {
+  const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-state');
+
+  const [states, setStates] = useState<StateDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Pagination & Search state
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
-  const [totalCount, setTotalCount] = useState(0);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<RoleDto>();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<StateDto>();
 
-  const fetchRoles = async () => {
+  const fetchStates = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Role', {
-        params: { pageNumber, pageSize, search }
-      });
+      const response: any = await axiosClient.get('/State');
       if (response?.success) {
-        if (response.data && response.data.items) {
-          setRoles(response.data.items);
-          setTotalCount(response.data.totalCount || 0);
-        } else {
-          setRoles(response.data || []);
-          setTotalCount((response.data || []).length);
-        }
+        setStates(response.data || []);
       }
     } catch (error) {
-      console.error('Failed to fetch roles', error);
+      console.error('Failed to fetch states', error);
+      toast.error('Failed to load states.');
     } finally {
       setIsLoading(false);
     }
@@ -86,80 +83,82 @@ export default function ManageRole() {
 
   useEffect(() => {
     if (canView) {
-      fetchRoles();
+      fetchStates();
     }
-  }, [canView, pageNumber, pageSize]);
+  }, [canView]);
+
+  // Client-side search filtering
+  const filteredStates = states.filter((s) => {
+    const searchLower = search.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(searchLower) ||
+      (s.code && s.code.toLowerCase().includes(searchLower)) ||
+      (s.country && s.country.toLowerCase().includes(searchLower))
+    );
+  });
+
+  // Client-side pagination
+  const totalCount = filteredStates.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const paginatedStates = filteredStates.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
 
   useEffect(() => {
-    if (canView) {
-      const delayDebounceFn = setTimeout(() => {
-        if (pageNumber === 1) {
-          fetchRoles();
-        } else {
-          setPageNumber(1);
-        }
-      }, 500);
-
-      return () => clearTimeout(delayDebounceFn);
-    }
-  }, [search]);
+    setPageNumber(1);
+  }, [search, pageSize]);
 
   const openCreateDialog = () => {
-    reset({ name: '', code: '', description: '', isActive: true });
+    reset({ name: '', code: '', country: 'India', isActive: true });
     setEditingId(null);
     setIsDialogOpen(true);
   };
 
-  const openEditDialog = (role: RoleDto) => {
-    reset({ 
-      name: role.name, 
-      code: role.code || '', 
-      description: role.description || '', 
-      isActive: role.isActive ?? true 
+  const openEditDialog = (s: StateDto) => {
+    reset({
+      name: s.name,
+      code: s.code || '',
+      country: s.country,
+      isActive: s.isActive,
     });
-    setEditingId(role.id || null);
+    setEditingId(s.id || null);
     setIsDialogOpen(true);
   };
 
-  const onSubmit = async (data: RoleDto) => {
+  const onSubmit = async (data: StateDto) => {
     try {
-      const payload = { ...data, companyId: user?.companyId };
       let response: any;
-      
       if (editingId) {
-        payload.id = editingId;
-        response = await axiosClient.put('/Role', payload);
+        response = await axiosClient.put('/State', { ...data, id: editingId });
       } else {
-        response = await axiosClient.post('/Role', payload);
+        response = await axiosClient.post('/State', data);
       }
-      
+
       if (response?.success) {
         setIsDialogOpen(false);
-        toast.success(editingId ? 'Role updated successfully!' : 'Role created successfully!');
-        fetchRoles();
+        toast.success(editingId ? 'State updated successfully!' : 'State created successfully!');
+        fetchStates();
       } else {
-        toast.error(response?.message || 'Failed to save role');
+        toast.error(response?.message || 'Failed to save state');
       }
     } catch (error: any) {
       console.error('Save error', error);
-      toast.error(error?.message || 'An error occurred while saving the role.');
+      toast.error(error?.message || 'An error occurred while saving.');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this role?')) return;
-    
+    if (!confirm('Are you sure you want to delete this state?')) return;
+
     try {
-      const response: any = await axiosClient.delete(`/Role/${id}`);
+      const response: any = await axiosClient.delete(`/State/${id}`);
       if (response?.success) {
-        toast.success('Role deleted successfully!');
-        fetchRoles();
+        toast.success('State deleted successfully!');
+        fetchStates();
       } else {
-        toast.error(response?.message || 'Failed to delete role');
+        toast.error(response?.message || 'Failed to delete state');
       }
     } catch (error: any) {
       console.error('Delete error', error);
-      toast.error(error?.message || 'An error occurred while deleting the role.');
+      toast.error(error?.message || 'An error occurred while deleting.');
     }
   };
 
@@ -178,20 +177,20 @@ export default function ManageRole() {
     <Page>
       <Section className="mb-4 flex justify-between items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Manage Roles</h1>
-          <p className="text-muted-foreground mt-1">Configure user roles and system access.</p>
+          <h1 className="text-3xl font-bold tracking-tight">State Management</h1>
+          <p className="text-muted-foreground mt-1">Configure and manage states in the system.</p>
         </div>
         <div className="flex items-center gap-4 flex-1 justify-end">
-          <Input 
-            type="search" 
-            placeholder="Search roles..." 
+          <Input
+            type="search"
+            placeholder="Search states..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-[300px]"
           />
           {canCreate && (
             <Button onClick={openCreateDialog} className="gap-2 shrink-0">
-              <Plus className="h-4 w-4" /> Add Role
+              <Plus className="h-4 w-4" /> Add State
             </Button>
           )}
         </div>
@@ -203,10 +202,10 @@ export default function ManageRole() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="w-[80px]">Sr. No.</TableHead>
-                <TableHead className="w-[200px]">Role Name</TableHead>
-                <TableHead className="w-[150px]">Code</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="w-[100px]">Status</TableHead>
+                <TableHead className="w-[250px]">State Name</TableHead>
+                <TableHead className="w-[150px]">State Code</TableHead>
+                <TableHead>Country</TableHead>
+                <TableHead className="w-[120px]">Status</TableHead>
                 {(canEdit || canDelete) && <TableHead className="text-right w-[120px]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -217,44 +216,63 @@ export default function ManageRole() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : roles.length === 0 ? (
+              ) : paginatedStates.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    No roles found.
+                    No states found.
                   </TableCell>
                 </TableRow>
               ) : (
-                roles.map((role, index) => (
-                  <TableRow key={role.id}>
+                paginatedStates.map((s, index) => (
+                  <TableRow key={s.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
                     </TableCell>
-                    <TableCell className="font-medium">{role.name}</TableCell>
+                    <TableCell className="font-medium flex items-center gap-2">
+                      <Map className="h-4 w-4 text-zinc-400" />
+                      {s.name}
+                    </TableCell>
                     <TableCell>
-                      {role.code ? (
+                      {s.code ? (
                         <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">
-                          {role.code}
+                          {s.code}
                         </code>
-                      ) : '-'}
+                      ) : (
+                        '-'
+                      )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground max-w-[300px] truncate">
-                      {role.description || '-'}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground">{s.country}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${role.isActive ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                        {role.isActive ? 'Active' : 'Inactive'}
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          s.isActive
+                            ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                            : 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300'
+                        }`}
+                      >
+                        {s.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </TableCell>
                     {(canEdit || canDelete) && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {canEdit && (
-                            <Button variant="ghost" size="icon" onClick={() => openEditDialog(role)} title="Edit">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditDialog(s)}
+                              title="Edit"
+                            >
                               <Pencil className="h-4 w-4 text-blue-500" />
                             </Button>
                           )}
-                          {canDelete && role.id && (
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(role.id!)} title="Delete">
+                          {canDelete && s.id && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(s.id!)}
+                              title="Delete"
+                            >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           )}
@@ -267,17 +285,14 @@ export default function ManageRole() {
             </TableBody>
           </Table>
         </div>
-        
+
         {totalCount > 0 && (
           <div className="py-4 px-6 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
               <p>Rows per page</p>
-              <Select 
-                value={pageSize.toString()} 
-                onValueChange={(val) => {
-                  setPageSize(Number(val));
-                  setPageNumber(1);
-                }}
+              <Select
+                value={pageSize.toString()}
+                onValueChange={(val) => setPageSize(Number(val))}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />
@@ -295,19 +310,25 @@ export default function ManageRole() {
             <Pagination className="mx-0 w-auto">
               <PaginationContent>
                 <PaginationItem>
-                  <PaginationPrevious 
-                    href="#" 
-                    onClick={(e) => { e.preventDefault(); if(pageNumber > 1) setPageNumber(pageNumber - 1); }} 
-                    className={pageNumber === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pageNumber > 1) setPageNumber(pageNumber - 1);
+                    }}
+                    className={pageNumber === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                   />
                 </PaginationItem>
-                
-                {Array.from({ length: Math.ceil(totalCount / pageSize) }, (_, i) => i + 1).map((page) => (
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <PaginationItem key={page}>
-                    <PaginationLink 
-                      href="#" 
+                    <PaginationLink
+                      href="#"
                       isActive={pageNumber === page}
-                      onClick={(e) => { e.preventDefault(); setPageNumber(page); }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setPageNumber(page);
+                      }}
                     >
                       {page}
                     </PaginationLink>
@@ -315,10 +336,13 @@ export default function ManageRole() {
                 ))}
 
                 <PaginationItem>
-                  <PaginationNext 
-                    href="#" 
-                    onClick={(e) => { e.preventDefault(); if(pageNumber < Math.ceil(totalCount / pageSize)) setPageNumber(pageNumber + 1); }} 
-                    className={pageNumber >= Math.ceil(totalCount / pageSize) ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (pageNumber < totalPages) setPageNumber(pageNumber + 1);
+                    }}
+                    className={pageNumber >= totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
                   />
                 </PaginationItem>
               </PaginationContent>
@@ -330,46 +354,52 @@ export default function ManageRole() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Role' : 'Create New Role'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Edit State' : 'Create State'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
             <FormField
-              label="Role Name"
-              placeholder="e.g. Administrator"
-              {...register('name', { required: 'Role name is required' })}
+              label="State Name"
+              placeholder="e.g. Maharashtra"
+              {...register('name', { required: 'State name is required' })}
             />
             {errors.name && <span className="text-xs text-red-500">{errors.name.message}</span>}
 
             <FormField
-              label="Role Code (Optional)"
-              placeholder="e.g. ADMIN"
+              label="State Code"
+              placeholder="e.g. MH"
               {...register('code')}
             />
-            
-            <FormField
-              label="Description (Optional)"
-              placeholder="e.g. Full system access"
-              {...register('description')}
-            />
 
-            <div className="flex items-center space-x-2 pt-2 pb-2">
+            <FormField
+              label="Country"
+              placeholder="India"
+              {...register('country', { required: 'Country name is required' })}
+            />
+            {errors.country && <span className="text-xs text-red-500">{errors.country.message}</span>}
+
+            <div className="flex items-center justify-between py-2">
+              <label htmlFor="isActive" className="text-sm font-medium text-foreground">
+                Status (Active)
+              </label>
               <Switch
                 id="isActive"
                 checked={watch('isActive')}
-                onCheckedChange={(val) => setValue('isActive', val)}
+                onCheckedChange={(checked) => setValue('isActive', checked)}
               />
-              <label htmlFor="isActive" className="text-sm font-medium leading-none cursor-pointer">
-                Is Active
-              </label>
             </div>
-            
+
             <DialogFooter className="mt-6 pt-4 border-t border-border">
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Role
+                Save State
               </Button>
             </DialogFooter>
           </form>
