@@ -284,6 +284,7 @@ export default function ManageStaff() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
+                <TableHead className="w-[80px]">Sr. No.</TableHead>
                 <TableHead>Full Name</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Designation</TableHead>
@@ -296,19 +297,22 @@ export default function ManageStaff() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : staffList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                     No staff members found.
                   </TableCell>
                 </TableRow>
               ) : (
-                staffList.map((staff) => (
+                staffList.map((staff, index) => (
                   <TableRow key={staff.id}>
+                    <TableCell className="font-medium">
+                      {(pageNumber - 1) * pageSize + index + 1}
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div>
                         <div>{staff.fullName}</div>

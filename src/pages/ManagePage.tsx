@@ -205,6 +205,7 @@ export default function ManagePage() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
+                <TableHead className="w-[80px]">Sr. No.</TableHead>
                 <TableHead className="w-[200px]">Page Name</TableHead>
                 <TableHead>Route</TableHead>
                 <TableHead>Order</TableHead>
@@ -215,19 +216,22 @@ export default function ManagePage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="h-24 text-center">
+                  <TableCell colSpan={6} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : pages.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No pages found.
                   </TableCell>
                 </TableRow>
               ) : (
-                pages.map((page) => (
+                pages.map((page, index) => (
                   <TableRow key={page.id}>
+                    <TableCell className="font-medium">
+                      {(pageNumber - 1) * pageSize + index + 1}
+                    </TableCell>
                     <TableCell className="font-medium">{page.name}</TableCell>
                     <TableCell>
                       <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm">

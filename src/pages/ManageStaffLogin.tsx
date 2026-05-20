@@ -291,6 +291,7 @@ export default function ManageStaffLogin() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
+                <TableHead className="w-[80px]">Sr. No.</TableHead>
                 <TableHead>Employee Name</TableHead>
                 <TableHead>Login Username</TableHead>
                 <TableHead>Email / Phone</TableHead>
@@ -302,19 +303,22 @@ export default function ManageStaffLogin() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={7} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : loginsList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     No login credentials configured.
                   </TableCell>
                 </TableRow>
               ) : (
-                loginsList.map((login) => (
+                loginsList.map((login, index) => (
                   <TableRow key={login.userId}>
+                    <TableCell className="font-medium">
+                      {(pageNumber - 1) * pageSize + index + 1}
+                    </TableCell>
                     <TableCell className="font-medium">
                       {login.staffName}
                     </TableCell>
