@@ -17,6 +17,12 @@ import ManageCompany from '@/pages/ManageCompany';
 import ManageState from '@/pages/ManageState';
 import ManageCity from '@/pages/ManageCity';
 import ManageProduct from '@/pages/ManageProduct';
+import ManageBrand from '@/pages/ManageBrand';
+import ManageManufacturer from '@/pages/ManageManufacturer';
+import ManageWarehouse from '@/pages/ManageWarehouse';
+import ManageHSNCode from '@/pages/ManageHSNCode';
+import ManageCustomer from '@/pages/ManageCustomer';
+import ManageSupplier from '@/pages/ManageSupplier';
 import Layout from '@/components/layout';
 import { useAppSelector } from '@/store/hooks';
 import { Toaster } from '@/components/ui/sonner';
@@ -55,6 +61,12 @@ export function App() {
                 <Route path="manage-state" element={<ManageState />} />
                 <Route path="manage-city" element={<ManageCity />} />
                 <Route path="product" element={<ManageProduct />} />
+                <Route path="brand" element={<ManageBrand />} />
+                <Route path="manufacturer" element={<ManageManufacturer />} />
+                <Route path="warehouse" element={<ManageWarehouse />} />
+                <Route path="hsncode" element={<ManageHSNCode />} />
+                <Route path="customer" element={<ManageCustomer />} />
+                <Route path="supplier" element={<ManageSupplier />} />
                 {/* Fallback for routes that haven't been created yet */}
                 <Route 
                   path="*" 
