@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
-import { Pencil, Trash2, Plus, Loader2, Package, Tag, Layers, Percent, Settings2 } from 'lucide-react';
+import { Pencil, Trash2, Plus, Loader2, Package, Tag, Layers, Percent, Settings2, QrCode, Printer } from 'lucide-react';
+import JsBarcode from 'jsbarcode';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
 import { Button } from '@/components/ui/button';
@@ -60,6 +61,233 @@ export default function ManageProduct() {
   const [hsnCodes, setHsnCodes] = useState<HSNCodeDto[]>([]);
   const [taxProfiles, setTaxProfiles] = useState<GstDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [autoSku, setAutoSku] = useState(true);
+
+  // Barcode Dialog & Generation State
+  const [selectedProductForBarcode, setSelectedProductForBarcode] = useState<ProductDto | null>(null);
+  const [isBarcodeOpen, setIsBarcodeOpen] = useState(false);
+
+  // Barcode Customization and Printing State
+  const [showNameOnBarcode, setShowNameOnBarcode] = useState(true);
+  const [showCodeOnBarcode, setShowCodeOnBarcode] = useState(true);
+  const [showPriceOnBarcode, setShowPriceOnBarcode] = useState(true);
+  const [barcodeHeight, setBarcodeHeight] = useState(80);
+  const [printCopies, setPrintCopies] = useState(1);
+  const [gridColumns, setGridColumns] = useState(3);
+
+  // Callback ref to render barcode when the element mounts in the Dialog DOM
+  const barcodeRef = useCallback((node: SVGSVGElement | null) => {
+    if (node && selectedProductForBarcode?.barcode) {
+      try {
+        JsBarcode(node, selectedProductForBarcode.barcode, {
+          format: 'CODE128',
+          lineColor: '#000',
+          width: 2,
+          height: barcodeHeight,
+          displayValue: true,
+        });
+      } catch (err) {
+        console.error("JsBarcode failed", err);
+      }
+    }
+  }, [selectedProductForBarcode, barcodeHeight]);
+
+  const openBarcodePreview = (p: ProductDto) => {
+    setSelectedProductForBarcode(p);
+    setPrintCopies(1); // Reset default to 1 copy
+    setIsBarcodeOpen(true);
+  };
+
+  const handleDownloadBarcode = () => {
+    if (!selectedProductForBarcode?.barcode) return;
+    try {
+      const canvas = document.createElement('canvas');
+      JsBarcode(canvas, selectedProductForBarcode.barcode, {
+        format: 'CODE128',
+        lineColor: '#000',
+        width: 2,
+        height: barcodeHeight,
+        displayValue: true,
+      });
+      
+      const url = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `barcode_${selectedProductForBarcode.sku || selectedProductForBarcode.productCode || selectedProductForBarcode.name}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Barcode downloaded successfully!');
+    } catch (err) {
+      console.error('Download failed', err);
+      toast.error('Failed to download barcode image.');
+    }
+  };
+
+  const handlePrintBarcode = () => {
+    if (!selectedProductForBarcode?.barcode) return;
+    
+    const canvas = document.createElement('canvas');
+    JsBarcode(canvas, selectedProductForBarcode.barcode, {
+      format: 'CODE128',
+      lineColor: '#000',
+      width: 2,
+      height: barcodeHeight,
+      displayValue: true,
+    });
+    const barcodeImgData = canvas.toDataURL('image/png');
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Pop-up blocked! Please allow pop-ups to print barcodes.');
+      return;
+    }
+    
+    const title = `Barcode Labels - ${selectedProductForBarcode.name}`;
+    const nameHtml = showNameOnBarcode ? `<div class="label-name">${selectedProductForBarcode.name}</div>` : '';
+    const codeHtml = showCodeOnBarcode ? `<div class="label-code">${selectedProductForBarcode.productCode} ${selectedProductForBarcode.sku ? `(${selectedProductForBarcode.sku})` : ''}</div>` : '';
+    
+    let priceText = '';
+    if (showPriceOnBarcode) {
+      if (selectedProductForBarcode.mrp && selectedProductForBarcode.mrp > 0) {
+        priceText += `MRP: ₹${selectedProductForBarcode.mrp.toFixed(2)} `;
+      }
+      if (selectedProductForBarcode.salesRate && selectedProductForBarcode.salesRate > 0) {
+        priceText += `Rate: ₹${selectedProductForBarcode.salesRate.toFixed(2)}`;
+      }
+    }
+    const priceHtml = priceText ? `<div class="label-price">${priceText}</div>` : '';
+    
+    let labelsHtml = '';
+    for (let i = 0; i < printCopies; i++) {
+      labelsHtml += `
+        <div class="barcode-card">
+          ${nameHtml}
+          ${codeHtml}
+          <img src="${barcodeImgData}" class="barcode-img" />
+          ${priceHtml}
+        </div>
+      `;
+    }
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            @page {
+              size: A4;
+              margin: 15mm 10mm 15mm 10mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              margin: 0;
+              padding: 0;
+              background-color: #fff;
+              color: #000;
+            }
+            .grid-container {
+              display: grid;
+              grid-template-columns: repeat(${gridColumns}, 1fr);
+              gap: 15px;
+              width: 100%;
+            }
+            .barcode-card {
+              border: 1px dashed #ccc;
+              border-radius: 4px;
+              padding: 10px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              text-align: center;
+              box-sizing: border-box;
+              background: #fff;
+              page-break-inside: avoid;
+              min-height: 120px;
+            }
+            .label-name {
+              font-size: 11px;
+              font-weight: bold;
+              margin-bottom: 2px;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+            .label-code {
+              font-size: 9px;
+              color: #555;
+              font-family: monospace;
+              margin-bottom: 4px;
+            }
+            .barcode-img {
+              max-width: 100%;
+              height: auto;
+              max-height: 70px;
+              margin: 4px 0;
+            }
+            .label-price {
+              font-size: 10px;
+              font-weight: bold;
+              margin-top: 2px;
+            }
+            @media print {
+              .barcode-card {
+                border: 1px solid #ddd;
+              }
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="grid-container">
+            ${labelsHtml}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 300);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleGenerateBarcodeDirectly = async (p: ProductDto) => {
+    const barcodeVal = Math.floor(100000000000 + Math.random() * 900000000000).toString();
+    const payload = {
+      ...p,
+      barcode: barcodeVal,
+      companyId: user?.companyId || p.companyId,
+      branchId: user?.branchId || p.branchId,
+      productType: p.productType ? Number(p.productType) : 1,
+      minStock: p.minStock ? Number(p.minStock) : 0,
+      reorderLevel: p.reorderLevel ? Number(p.reorderLevel) : 0,
+      purchaseRate: p.purchaseRate ? Number(p.purchaseRate) : 0,
+      salesRate: p.salesRate ? Number(p.salesRate) : 0,
+      mrp: p.mrp ? Number(p.mrp) : 0,
+    };
+    try {
+      const response: any = await axiosClient.put('/Product', payload);
+      if (response?.success) {
+        toast.success(`Barcode generated successfully for ${p.name}!`);
+        fetchProducts();
+      } else {
+        toast.error(response?.message || 'Failed to update barcode');
+      }
+    } catch (error: any) {
+      console.error('Failed to generate barcode', error);
+      toast.error('An error occurred while generating barcode.');
+    }
+  };
 
   // Pagination & Search state
   const [pageNumber, setPageNumber] = useState(1);
@@ -79,6 +307,47 @@ export default function ManageProduct() {
     watch,
     formState: { errors, isSubmitting },
   } = useForm<ProductDto>();
+
+  const selectedCategoryId = watch('categoryId');
+
+  useEffect(() => {
+    if (!autoSku) return;
+
+    let prefix = 'PRD';
+    if (selectedCategoryId) {
+      const category = categories.find((c) => c.id === selectedCategoryId);
+      if (category) {
+        if (category.code && category.code.trim()) {
+          prefix = category.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        } else if (category.name && category.name.trim()) {
+          prefix = category.name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+        }
+      }
+    }
+    if (!prefix) {
+      prefix = 'PRD';
+    }
+
+    const regex = new RegExp(`^${prefix}(\\d+)$`, 'i');
+    let maxNum = 0;
+    products.forEach((p) => {
+      if (p.sku) {
+        const match = p.sku.match(regex);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    });
+
+    const nextNum = maxNum + 1;
+    const suffix = nextNum.toString().padStart(4, '0');
+    const nextSku = `${prefix}${suffix}`;
+
+    setValue('sku', nextSku);
+  }, [autoSku, selectedCategoryId, categories, products, setValue]);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -170,6 +439,7 @@ export default function ManageProduct() {
       mrp: 0,
       isActive: true,
     });
+    setAutoSku(true);
     setEditingId(null);
     setActiveTab('general');
     setIsDialogOpen(true);
@@ -200,6 +470,7 @@ export default function ManageProduct() {
       mrp: p.mrp || 0,
       isActive: p.isActive,
     });
+    setAutoSku(false);
     setEditingId(p.id || null);
     setActiveTab('general');
     setIsDialogOpen(true);
@@ -338,6 +609,34 @@ export default function ManageProduct() {
                       <TableCell>
                         <div className="text-sm font-semibold">{p.productCode}</div>
                         {p.sku && <div className="text-xs text-muted-foreground font-mono">SKU: {p.sku}</div>}
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          {p.barcode ? (
+                            <>
+                              <span className="text-xs font-mono bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-600 dark:text-zinc-400">
+                                {p.barcode}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 shrink-0 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                onClick={() => openBarcodePreview(p)}
+                                title="View/Print Barcode"
+                              >
+                                <QrCode className="h-3.5 w-3.5 text-zinc-500" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 px-1.5 py-0 text-[10px] text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded font-medium border border-blue-200 dark:border-blue-800/30"
+                              onClick={() => handleGenerateBarcodeDirectly(p)}
+                              title="Quick Generate Barcode"
+                            >
+                              + Barcode
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs leading-relaxed text-muted-foreground">
                         <div>📁 {catName}</div>
@@ -502,16 +801,61 @@ export default function ManageProduct() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    label="SKU"
-                    placeholder="Stock Keeping Unit"
-                    {...register('sku')}
-                  />
-                  <FormField
-                    label="Barcode"
-                    placeholder="EAN/UPC Barcode"
-                    {...register('barcode')}
-                  />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="sku" className="text-base leading-none select-none text-zinc-200">
+                        SKU
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
+                          {autoSku ? 'Auto-Gen' : 'Manual'}
+                        </span>
+                        <Switch
+                          id="autoSku"
+                          checked={autoSku}
+                          onCheckedChange={(checked) => {
+                            setAutoSku(checked);
+                            if (checked) {
+                              toast.info('Auto-generating SKU based on category.');
+                            }
+                          }}
+                          className="scale-75 origin-right"
+                        />
+                      </div>
+                    </div>
+                    <Input
+                      id="sku"
+                      placeholder="Stock Keeping Unit"
+                      readOnly={autoSku}
+                      className={autoSku ? "bg-zinc-100 dark:bg-zinc-900 text-zinc-500 cursor-not-allowed font-mono border-zinc-300 dark:border-zinc-700" : ""}
+                      {...register('sku', { required: 'SKU is required' })}
+                    />
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <FormField
+                        label="Barcode"
+                        placeholder="EAN/UPC Barcode"
+                        {...register('barcode')}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const barcodeVal = Math.floor(100000000000 + Math.random() * 900000000000).toString();
+                        setValue('barcode', barcodeVal);
+                        toast.success("Barcode generated! Don't forget to save the product.");
+                      }}
+                      className="shrink-0 mb-[1px] h-10 px-3 cursor-pointer"
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {errors.sku && <span className="text-xs text-red-500">{errors.sku.message}</span>}
+                  {errors.barcode && <span className="text-xs text-red-500">{errors.barcode.message}</span>}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -772,6 +1116,175 @@ export default function ManageProduct() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Barcode Dialog */}
+      <Dialog open={isBarcodeOpen} onOpenChange={setIsBarcodeOpen}>
+        <DialogContent className="sm:max-w-[520px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-md">
+          <DialogHeader className="pb-4 border-b border-zinc-100 dark:border-zinc-800">
+            <DialogTitle className="flex items-center gap-2.5 text-xl font-bold text-zinc-900 dark:text-zinc-50">
+              <div className="p-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
+                <QrCode className="h-5 w-5" />
+              </div>
+              Barcode Label Generator & Print
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedProductForBarcode && (
+            <div className="space-y-6 py-4">
+              {/* Preview Box */}
+              <div className="flex flex-col items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-900 rounded-xl relative overflow-hidden">
+                <div className="absolute top-2 right-2 text-[9px] uppercase font-bold tracking-wider text-zinc-400 dark:text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                  Live Preview
+                </div>
+                
+                <div className="bg-white p-5 rounded-lg shadow-md border border-zinc-100 flex flex-col items-center justify-center min-w-[260px] transition-transform duration-200 hover:scale-[1.02]">
+                  {/* Label Text Preview */}
+                  {showNameOnBarcode && (
+                    <div className="text-xs font-bold text-zinc-950 mb-1 max-w-[220px] text-center truncate">
+                      {selectedProductForBarcode.name}
+                    </div>
+                  )}
+                  {showCodeOnBarcode && (
+                    <div className="text-[10px] text-zinc-500 font-mono mb-1.5">
+                      {selectedProductForBarcode.productCode} {selectedProductForBarcode.sku ? `(SKU: ${selectedProductForBarcode.sku})` : ''}
+                    </div>
+                  )}
+                  
+                  {/* SVG Barcode */}
+                  <div className="bg-white p-1 rounded">
+                    <svg ref={barcodeRef} className="max-w-full"></svg>
+                  </div>
+                  
+                  {/* Price Info */}
+                  {showPriceOnBarcode && (
+                    <div className="text-xs font-extrabold text-zinc-900 mt-2 flex gap-2.5">
+                      {selectedProductForBarcode.mrp && selectedProductForBarcode.mrp > 0 && (
+                        <span className="text-zinc-500 line-through font-normal">MRP: ₹{selectedProductForBarcode.mrp.toFixed(2)}</span>
+                      )}
+                      {selectedProductForBarcode.salesRate !== undefined && (
+                        <span className="text-blue-600 dark:text-blue-500">Rate: ₹{selectedProductForBarcode.salesRate.toFixed(2)}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-4 bg-zinc-50/50 dark:bg-zinc-900/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-900">
+                <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-2">
+                  Label Customization
+                </div>
+                
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="showNameOnBarcode" className="font-medium text-zinc-700 dark:text-zinc-300">Show Name</label>
+                    <Switch
+                      id="showNameOnBarcode"
+                      checked={showNameOnBarcode}
+                      onCheckedChange={setShowNameOnBarcode}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="showCodeOnBarcode" className="font-medium text-zinc-700 dark:text-zinc-300">Show Code/SKU</label>
+                    <Switch
+                      id="showCodeOnBarcode"
+                      checked={showCodeOnBarcode}
+                      onCheckedChange={setShowCodeOnBarcode}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between col-span-2 pt-1 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <label htmlFor="showPriceOnBarcode" className="font-medium text-zinc-700 dark:text-zinc-300">Show Price Info</label>
+                    <Switch
+                      id="showPriceOnBarcode"
+                      checked={showPriceOnBarcode}
+                      onCheckedChange={setShowPriceOnBarcode}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col gap-1.5 col-span-2 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/60">
+                    <div className="flex justify-between text-xs font-medium text-zinc-500">
+                      <span>Barcode Height</span>
+                      <span>{barcodeHeight}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      id="barcodeHeight"
+                      min="40"
+                      max="120"
+                      value={barcodeHeight}
+                      onChange={(e) => setBarcodeHeight(Number(e.target.value))}
+                      className="w-full accent-blue-600 cursor-pointer h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 pt-2 border-t border-zinc-100 dark:border-zinc-800 mb-2">
+                  Print Layout Configuration
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="printCopies" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Copies to Print</label>
+                    <Input
+                      id="printCopies"
+                      type="number"
+                      min="1"
+                      max="500"
+                      value={printCopies}
+                      onChange={(e) => setPrintCopies(Math.max(1, Number(e.target.value)))}
+                      className="h-9 w-full font-semibold border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="gridColumns" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Grid Layout Columns</label>
+                    <Select
+                      value={gridColumns.toString()}
+                      onValueChange={(val) => setGridColumns(Number(val))}
+                    >
+                      <SelectTrigger id="gridColumns" className="h-9 w-full border-zinc-200 dark:border-zinc-800">
+                        <SelectValue placeholder="Layout" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Column (Single Roll)</SelectItem>
+                        <SelectItem value="2">2 Columns Grid</SelectItem>
+                        <SelectItem value="3">3 Columns (Standard A4)</SelectItem>
+                        <SelectItem value="4">4 Columns (Dense A4)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsBarcodeOpen(false)}
+              className="border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors animate-fade-in"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadBarcode}
+              className="border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors animate-fade-in"
+            >
+              Download PNG
+            </Button>
+            <Button
+              type="button"
+              onClick={handlePrintBarcode}
+              className="gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-md shadow-blue-500/20 transition-all cursor-pointer animate-fade-in"
+            >
+              <Printer className="h-4 w-4" /> Print Labels
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Page>
