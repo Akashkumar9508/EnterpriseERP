@@ -671,6 +671,16 @@ export default function ManageProduct() {
                       {(canEdit || canDelete) && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {p.id && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => navigate('/product-attributes', { state: { productId: p.id, activeTab: 'variants' } })}
+                                title="Manage Attributes (Variants, Batches, Serials)"
+                              >
+                                <Settings2 className="h-4 w-4 text-zinc-500" />
+                              </Button>
+                            )}
                             {canEdit && (
                               <Button
                                 variant="ghost"

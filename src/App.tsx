@@ -18,6 +18,7 @@ import ManageState from '@/pages/ManageState';
 import ManageCity from '@/pages/ManageCity';
 import ManageProduct from '@/pages/ManageProduct';
 import GenerateBarcode from '@/pages/GenerateBarcode';
+import ProductAttributes from '@/pages/ProductAttributes';
 import ManageBrand from '@/pages/ManageBrand';
 import ManageManufacturer from '@/pages/ManageManufacturer';
 import ManageWarehouse from '@/pages/ManageWarehouse';
@@ -63,6 +64,7 @@ export function App() {
                 <Route path="manage-city" element={<ManageCity />} />
                 <Route path="product" element={<ManageProduct />} />
                 <Route path="generate-barcode" element={<GenerateBarcode />} />
+                <Route path="product-attributes" element={<ProductAttributes />} />
                 <Route path="brand" element={<ManageBrand />} />
                 <Route path="manufacturer" element={<ManageManufacturer />} />
                 <Route path="warehouse" element={<ManageWarehouse />} />
