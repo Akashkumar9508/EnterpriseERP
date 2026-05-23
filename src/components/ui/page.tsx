@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const pageVariants = cva(
-  "min-h-screen text-foreground overflow-hidden",
+  "min-h-screen text-foreground",
   {
     variants: {
       variant: {

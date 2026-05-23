@@ -19,6 +19,10 @@ import ManageCity from '@/pages/ManageCity';
 import ManageProduct from '@/pages/ManageProduct';
 import GenerateBarcode from '@/pages/GenerateBarcode';
 import ProductAttributes from '@/pages/ProductAttributes';
+import ManageStockAdjustment from '@/pages/ManageStockAdjustment';
+import InventoryStatus from '@/pages/InventoryStatus';
+import ManagePurchaseInvoice from '@/pages/ManagePurchaseInvoice';
+import CreatePurchaseInvoice from '@/pages/CreatePurchaseInvoice';
 import ManageBrand from '@/pages/ManageBrand';
 import ManageManufacturer from '@/pages/ManageManufacturer';
 import ManageWarehouse from '@/pages/ManageWarehouse';
@@ -65,6 +69,10 @@ export function App() {
                 <Route path="product" element={<ManageProduct />} />
                 <Route path="generate-barcode" element={<GenerateBarcode />} />
                 <Route path="product-attributes" element={<ProductAttributes />} />
+                <Route path="stock-adjustment" element={<ManageStockAdjustment />} />
+                <Route path="inventory-status" element={<InventoryStatus />} />
+                <Route path="purchase-invoice" element={<ManagePurchaseInvoice />} />
+                <Route path="purchase-invoice/create" element={<CreatePurchaseInvoice />} />
                 <Route path="brand" element={<ManageBrand />} />
                 <Route path="manufacturer" element={<ManageManufacturer />} />
                 <Route path="warehouse" element={<ManageWarehouse />} />
