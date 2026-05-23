@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
-import { Pencil, Trash2, Plus, Loader2, Package, Tag, Layers, Percent, Settings2, QrCode, Printer } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Pencil, Trash2, Plus, Loader2, Package, Tag, Layers, Percent, Settings2, QrCode, Printer, Barcode } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -51,6 +52,7 @@ import type { HSNCodeDto } from '@/types/HSNCodeDto';
 import type { GstDto } from '@/types/GstDto';
 
 export default function ManageProduct() {
+  const navigate = useNavigate();
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/product');
   const user = useAppSelector((state) => state.auth.user);
 
@@ -554,6 +556,13 @@ export default function ManageProduct() {
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-[300px]"
           />
+          <Button 
+            variant="outline"
+            onClick={() => navigate('/generate-barcode')}
+            className="gap-2 shrink-0 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+          >
+            <Barcode className="h-4.5 w-4.5" /> Barcode Generator
+          </Button>
           {canCreate && (
             <Button onClick={openCreateDialog} className="gap-2 shrink-0">
               <Plus className="h-4 w-4" /> Add Product
@@ -662,6 +671,16 @@ export default function ManageProduct() {
                       {(canEdit || canDelete) && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {p.id && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => navigate('/product-attributes', { state: { productId: p.id, activeTab: 'variants' } })}
+                                title="Manage Attributes (Variants, Batches, Serials)"
+                              >
+                                <Settings2 className="h-4 w-4 text-zinc-500" />
+                              </Button>
+                            )}
                             {canEdit && (
                               <Button
                                 variant="ghost"
