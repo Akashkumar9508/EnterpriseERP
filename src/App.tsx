@@ -73,6 +73,7 @@ export function App() {
                 <Route path="inventory-status" element={<InventoryStatus />} />
                 <Route path="purchase-invoice" element={<ManagePurchaseInvoice />} />
                 <Route path="purchase-invoice/create" element={<CreatePurchaseInvoice />} />
+                <Route path="purchase-invoice/edit/:id" element={<CreatePurchaseInvoice />} />
                 <Route path="brand" element={<ManageBrand />} />
                 <Route path="manufacturer" element={<ManageManufacturer />} />
                 <Route path="warehouse" element={<ManageWarehouse />} />

@@ -33,4 +33,6 @@ export interface ProductDto {
   manufacturerName?: string;
   hsnCodeName?: string;
   taxProfileName?: string;
+  unitId?: string;
+  unitName?: string;
 }

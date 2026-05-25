@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Plus, 
   Trash2, 
@@ -46,8 +46,13 @@ import type { PurchaseInvoiceItemDto } from '@/types/PurchaseInvoiceItemDto';
 
 export default function CreatePurchaseInvoice() {
   const navigate = useNavigate();
+  const { id: editId } = useParams<{ id: string }>();
+  const isEditMode = !!editId;
   const { canCreate } = usePermissions('/product');
   const user = useAppSelector((state) => state.auth.user);
+
+  // Edit-mode loading
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
 
   // dependencies lists
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
@@ -129,6 +134,60 @@ export default function CreatePurchaseInvoice() {
       fetchDeps();
     }
   }, [canCreate]);
+
+  // Load existing invoice in edit mode
+  useEffect(() => {
+    if (!isEditMode || !editId) return;
+
+    const loadInvoice = async () => {
+      setIsLoadingEdit(true);
+      try {
+        const response: any = await axiosClient.get(`/PurchaseInvoice/${editId}`);
+        if (response?.success && response.data) {
+          const inv = response.data;
+          setSupplierId(inv.supplierId || '');
+          setWarehouseId(inv.warehouseId || '');
+          setInvoiceNo(inv.invoiceNo || '');
+          setReferenceNo(inv.referenceNo || '');
+          setInvoiceDate(inv.invoiceDate ? new Date(inv.invoiceDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+          setRemarks(inv.remarks || '');
+          if (inv.items && inv.items.length > 0) {
+            setItems(inv.items.map((item: any) => ({
+              id: item.id,
+              productId: item.productId || '',
+              productVariantId: item.productVariantId || '',
+              productBatchId: item.productBatchId || '',
+              quantity: item.quantity || 1,
+              freeQuantity: item.freeQuantity || 0,
+              purchaseRate: item.purchaseRate || 0,
+              salesRate: item.salesRate || 0,
+              mrp: item.mrp || 0,
+              discountPercent: item.discountPercent || 0,
+              discountAmount: item.discountAmount || 0,
+              taxPercent: item.taxPercent || 0,
+              taxAmount: item.taxAmount || 0,
+              totalAmount: item.totalAmount || 0
+            })));
+          }
+          // Restore flat discount: existing discountAmount minus sum of line discounts
+          const lineDiscountsSum = (inv.items || []).reduce((s: number, i: any) => s + (i.discountAmount || 0), 0);
+          const flatDisc = (inv.discountAmount || 0) - lineDiscountsSum;
+          setFlatDiscountAmount(flatDisc > 0 ? flatDisc : 0);
+        } else {
+          toast.error('Failed to load invoice for editing.');
+          navigate('/purchase-invoice');
+        }
+      } catch (e) {
+        console.error('Failed to load invoice', e);
+        toast.error('Failed to load invoice for editing.');
+        navigate('/purchase-invoice');
+      } finally {
+        setIsLoadingEdit(false);
+      }
+    };
+
+    loadInvoice();
+  }, [isEditMode, editId]);
 
   // add blank line item row
   const addLineItem = () => {
@@ -335,9 +394,21 @@ export default function CreatePurchaseInvoice() {
         }))
       };
 
-      const response: any = await axiosClient.post('/PurchaseInvoice', payload);
+      let response: any;
+      if (isEditMode && editId) {
+        response = await axiosClient.put(`/PurchaseInvoice/${editId}`, payload);
+      } else {
+        response = await axiosClient.post('/PurchaseInvoice', payload);
+      }
+
       if (response?.success) {
-        toast.success(status === 2 ? 'Purchase Invoice posted and stock updated!' : 'Purchase Invoice saved as draft!');
+        toast.success(
+          status === 2
+            ? 'Purchase Invoice posted and stock updated!'
+            : isEditMode
+              ? 'Purchase Invoice draft updated successfully!'
+              : 'Purchase Invoice saved as draft!'
+        );
         navigate('/purchase-invoice');
       } else {
         toast.error(response?.message || 'Failed to save purchase invoice.');
@@ -370,6 +441,17 @@ export default function CreatePurchaseInvoice() {
     );
   }
 
+  if (isLoadingEdit) {
+    return (
+      <Page>
+        <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Loading invoice for editing...</span>
+        </div>
+      </Page>
+    );
+  }
+
   return (
     <Page>
       {/* Top action header */}
@@ -379,8 +461,14 @@ export default function CreatePurchaseInvoice() {
             <ArrowLeft className="h-4.5 w-4.5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">New Purchase Invoice</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Record new purchase billing details from a supplier.</p>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {isEditMode ? 'Edit Purchase Invoice' : 'New Purchase Invoice'}
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isEditMode
+                ? 'Update the draft invoice details. Only draft invoices can be edited.'
+                : 'Record new purchase billing details from a supplier.'}
+            </p>
           </div>
         </div>
         

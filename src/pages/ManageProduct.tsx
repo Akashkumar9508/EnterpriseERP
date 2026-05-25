@@ -50,6 +50,7 @@ import type { BrandDto } from '@/types/BrandDto';
 import type { ManufacturerDto } from '@/types/ManufacturerDto';
 import type { HSNCodeDto } from '@/types/HSNCodeDto';
 import type { GstDto } from '@/types/GstDto';
+import type { UnitDto } from '@/types/UnitDto';
 
 export default function ManageProduct() {
   const navigate = useNavigate();
@@ -62,6 +63,7 @@ export default function ManageProduct() {
   const [manufacturers, setManufacturers] = useState<ManufacturerDto[]>([]);
   const [hsnCodes, setHsnCodes] = useState<HSNCodeDto[]>([]);
   const [taxProfiles, setTaxProfiles] = useState<GstDto[]>([]);
+  const [units, setUnits] = useState<UnitDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [autoSku, setAutoSku] = useState(true);
 
@@ -368,12 +370,13 @@ export default function ManageProduct() {
 
   const fetchDropdownData = async () => {
     try {
-      const [resCats, resBrands, resMfrs, resHsn, resTax] = (await Promise.all([
+      const [resCats, resBrands, resMfrs, resHsn, resTax, resUnits] = (await Promise.all([
         axiosClient.get('/Category'),
         axiosClient.get('/Brand'),
         axiosClient.get('/Manufacturer'),
         axiosClient.get('/HSNCode'),
         axiosClient.get('/TaxProfile'),
+        axiosClient.get('/Unit'),
       ])) as any[];
 
       if (resCats?.success) setCategories(resCats.data || []);
@@ -381,6 +384,7 @@ export default function ManageProduct() {
       if (resMfrs?.success) setManufacturers(resMfrs.data || []);
       if (resHsn?.success) setHsnCodes(resHsn.data || []);
       if (resTax?.success) setTaxProfiles(resTax.data || []);
+      if (resUnits?.success) setUnits(resUnits.data || []);
     } catch (error) {
       console.error('Failed to fetch product dependencies', error);
     }
@@ -440,6 +444,7 @@ export default function ManageProduct() {
       salesRate: 0,
       mrp: 0,
       isActive: true,
+      unitId: '',
     });
     setAutoSku(true);
     setEditingId(null);
@@ -471,6 +476,7 @@ export default function ManageProduct() {
       salesRate: p.salesRate || 0,
       mrp: p.mrp || 0,
       isActive: p.isActive,
+      unitId: p.unitId || '',
     });
     setAutoSku(false);
     setEditingId(p.id || null);
@@ -883,6 +889,29 @@ export default function ManageProduct() {
                     placeholder="Display alias"
                     {...register('shortName')}
                   />
+                  <div className="space-y-2">
+                    <label htmlFor="unitId" className="text-sm font-medium text-foreground">
+                      Base Unit
+                    </label>
+                    <Select
+                      value={watch('unitId') || ''}
+                      onValueChange={(val) => setValue('unitId', val)}
+                    >
+                      <SelectTrigger id="unitId">
+                        <SelectValue placeholder="Select Unit (e.g. pcs, kg)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {units.map((u) => (
+                          <SelectItem key={u.id} value={u.id || ''}>
+                            {u.name} ({u.symbol})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label htmlFor="productType" className="text-sm font-medium text-foreground">
                       Product Type
