@@ -37,15 +37,43 @@ import {
 } from '@/components/ui/pagination';
 import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import type { CompanyDto } from '@/types/CompanyDto';
 
 export default function ManageCompany() {
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-company');
+  const user = useAppSelector((state) => state.auth.user);
+  const isSuperAdmin =
+    user?.roleId === 'b77a760c-2df5-4d7a-8f55-b461413a1ad1' ||
+    user?.username === 'admin' ||
+    user?.username === 'akash' ||
+    user?.email === 'akash@gmail.com' ||
+    user?.email === 'akash@test.com';
 
   const [companies, setCompanies] = useState<CompanyDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  interface SubscriptionPackageDto {
+    id: string;
+    name: string;
+    maxStores: number;
+    description?: string;
+  }
+
+  const [packages, setPackages] = useState<SubscriptionPackageDto[]>([]);
+
+  const fetchPackages = async () => {
+    try {
+      const response: any = await axiosClient.get('/SubscriptionPackage');
+      if (response?.success) {
+        setPackages(response.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subscription packages', error);
+    }
+  };
 
   // Pagination & Search state
   const [pageNumber, setPageNumber] = useState(1);
@@ -60,6 +88,8 @@ export default function ManageCompany() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CompanyDto>();
 
@@ -81,6 +111,7 @@ export default function ManageCompany() {
   useEffect(() => {
     if (canView) {
       fetchCompanies();
+      fetchPackages();
     }
   }, [canView]);
 
@@ -104,6 +135,7 @@ export default function ManageCompany() {
   }, [search, pageSize]);
 
   const openCreateDialog = () => {
+    const silverPackage = packages.find((p) => p.name === 'Silver');
     reset({
       name: '',
       legalName: '',
@@ -114,6 +146,7 @@ export default function ManageCompany() {
       currencyCode: 'INR',
       financialYearStart: new Date().toISOString().split('T')[0],
       address: '',
+      packageId: silverPackage?.id || '',
     });
     setEditingId(null);
     setIsDialogOpen(true);
@@ -130,6 +163,7 @@ export default function ManageCompany() {
       currencyCode: c.currencyCode || 'INR',
       financialYearStart: c.financialYearStart ? c.financialYearStart.split('T')[0] : '',
       address: c.address || '',
+      packageId: c.packageId || '',
     });
     setEditingId(c.id || null);
     setIsDialogOpen(true);
@@ -217,6 +251,7 @@ export default function ManageCompany() {
                 <TableHead className="w-[200px]">Company Name</TableHead>
                 <TableHead>Legal Name</TableHead>
                 <TableHead>GST No.</TableHead>
+                {isSuperAdmin && <TableHead>Package</TableHead>}
                 <TableHead>Phone / Email</TableHead>
                 <TableHead>Address</TableHead>
                 {(canEdit || canDelete) && <TableHead className="text-right w-[120px]">Actions</TableHead>}
@@ -225,13 +260,13 @@ export default function ManageCompany() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center">
+                  <TableCell colSpan={isSuperAdmin ? 8 : 7} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : paginatedCompanies.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={isSuperAdmin ? 8 : 7} className="h-24 text-center text-muted-foreground">
                     No companies found.
                   </TableCell>
                 </TableRow>
@@ -255,6 +290,17 @@ export default function ManageCompany() {
                         '-'
                       )}
                     </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          c.packageName === 'Platinum' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                          c.packageName === 'Gold' || c.packageName === 'Golden' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                          'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300'
+                        }`}>
+                          {c.packageName || 'Silver'}
+                        </span>
+                      </TableCell>
+                    )}
                     <TableCell className="text-muted-foreground text-xs leading-relaxed">
                       {c.phone && <div>📞 {c.phone}</div>}
                       {c.email && <div>✉️ {c.email}</div>}
@@ -418,6 +464,27 @@ export default function ManageCompany() {
                 {...register('financialYearStart')}
               />
             </div>
+
+            {isSuperAdmin && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Package</label>
+                <Select
+                  value={watch('packageId') || ''}
+                  onValueChange={(val) => setValue('packageId', val)}
+                >
+                  <SelectTrigger className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                    <SelectValue placeholder="Select Package" />
+                  </SelectTrigger>
+                  <SelectContent side="top">
+                    {packages.map((pkg) => (
+                      <SelectItem key={pkg.id} value={pkg.id}>
+                        {pkg.name} ({pkg.maxStores === -1 ? 'Multiple' : `${pkg.maxStores} ${pkg.maxStores === 1 ? 'Store' : 'Stores'}`})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <FormField
               label="Address"

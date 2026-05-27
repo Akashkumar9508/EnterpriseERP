@@ -20,6 +20,7 @@ import ManageProduct from '@/pages/ManageProduct';
 import GenerateBarcode from '@/pages/GenerateBarcode';
 import ProductAttributes from '@/pages/ProductAttributes';
 import ManageStockAdjustment from '@/pages/ManageStockAdjustment';
+import ManageStockTransfer from '@/pages/ManageStockTransfer';
 import InventoryStatus from '@/pages/InventoryStatus';
 import ManagePurchaseInvoice from '@/pages/ManagePurchaseInvoice';
 import CreatePurchaseInvoice from '@/pages/CreatePurchaseInvoice';
@@ -70,6 +71,8 @@ export function App() {
                 <Route path="generate-barcode" element={<GenerateBarcode />} />
                 <Route path="product-attributes" element={<ProductAttributes />} />
                 <Route path="stock-adjustment" element={<ManageStockAdjustment />} />
+                <Route path="stock-transfer" element={<ManageStockTransfer />} />
+                <Route path="stocktransfer" element={<ManageStockTransfer />} />
                 <Route path="inventory-status" element={<InventoryStatus />} />
                 <Route path="purchase-invoice" element={<ManagePurchaseInvoice />} />
                 <Route path="purchase-invoice/create" element={<CreatePurchaseInvoice />} />

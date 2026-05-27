@@ -15,6 +15,7 @@ axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("bteowkeelnl")
     if (token) {
+      
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -34,8 +35,16 @@ axiosClient.interceptors.response.use(
         window.location.href = "/admin"
       }
     }
-    console.error("API Error:", error.response?.data || error.message)
-    return Promise.reject(error.response?.data || "Something went wrong")
+    const data = error.response?.data;
+    const message = (data && typeof data === 'object')
+      ? (data.message || data.Message || error.message || "Something went wrong")
+      : (data || error.message || "Something went wrong");
+
+    console.error("API Error:", message);
+    return Promise.reject({
+      ...(data && typeof data === 'object' ? data : {}),
+      message
+    });
   }
 )
 

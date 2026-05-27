@@ -194,7 +194,7 @@ export default function ManageWarehouse() {
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-[300px]"
           />
-          {canCreate && (
+          {canCreate &&  (
             <Button onClick={openCreateDialog} className="gap-2 shrink-0">
               <Plus className="h-4 w-4" /> Add Warehouse
             </Button>
