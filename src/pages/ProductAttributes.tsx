@@ -188,7 +188,7 @@ function SearchableProductDropdown({
 export default function ProductAttributes() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { canView, canCreate, canEdit, canDelete } = usePermissions('/product');
+  const { canView, canCreate, canEdit, canDelete } = usePermissions('/product-attributes');
 
   // Determine active tab from state or query parameters, default to variants
   const initialTab = (location.state as any)?.activeTab || 'variants';

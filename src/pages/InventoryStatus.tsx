@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/pagination';
 import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
 import type { InventoryStatusDto } from '@/types/InventoryStatusDto';
@@ -52,7 +53,8 @@ interface GroupedProductStock {
 }
 
 export default function InventoryStatus() {
-  const { canView } = usePermissions('/product');
+  const { canView } = usePermissions('/inventory-status');
+  const user = useAppSelector((state) => state.auth.user);
 
   // Core Data States
   const [statusData, setStatusData] = useState<InventoryStatusDto[]>([]);
@@ -91,14 +93,37 @@ export default function InventoryStatus() {
     statusData.forEach(item => {
       map.set(item.warehouseId, item.warehouseName);
     });
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [statusData]);
+    const list = Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    if (user?.warehouseId) {
+      return list.filter(wh => wh.id === user.warehouseId);
+    }
+    return list;
+  }, [statusData, user?.warehouseId]);
+
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('all');
+
+  useEffect(() => {
+    if (user?.warehouseId) {
+      setSelectedWarehouseId(user.warehouseId);
+    }
+  }, [user?.warehouseId]);
+
+  const activeWarehouses = useMemo(() => {
+    if (selectedWarehouseId === 'all') {
+      return warehouses;
+    }
+    return warehouses.filter(wh => wh.id === selectedWarehouseId);
+  }, [warehouses, selectedWarehouseId]);
 
   // Group raw rows (product-warehouse pairs) into product-centric rows with warehouse stocks mapping
   const groupedStocks = useMemo(() => {
     const map = new Map<string, GroupedProductStock>();
     
     statusData.forEach(item => {
+      if (user?.warehouseId && item.warehouseId !== user.warehouseId) {
+        return;
+      }
+      
       if (!map.has(item.productId)) {
         map.set(item.productId, {
           productId: item.productId,
@@ -113,11 +138,19 @@ export default function InventoryStatus() {
       
       const entry = map.get(item.productId)!;
       entry.stocks[item.warehouseId] = item.currentStock;
-      entry.totalStock += item.currentStock;
     });
 
-    return Array.from(map.values());
-  }, [statusData]);
+    const list = Array.from(map.values());
+    list.forEach(entry => {
+      if (selectedWarehouseId === 'all') {
+        entry.totalStock = Object.values(entry.stocks).reduce((sum, qty) => sum + qty, 0);
+      } else {
+        entry.totalStock = entry.stocks[selectedWarehouseId] || 0;
+      }
+    });
+
+    return list;
+  }, [statusData, user?.warehouseId, selectedWarehouseId]);
 
   // Filter products client-side
   const filteredStocks = useMemo(() => {
@@ -155,7 +188,7 @@ export default function InventoryStatus() {
 
   useEffect(() => {
     setPageNumber(1);
-  }, [search, stockStatusFilter, pageSize]);
+  }, [search, stockStatusFilter, pageSize, selectedWarehouseId]);
 
   // Highlight widgets details
   const widgets = useMemo(() => {
@@ -249,6 +282,28 @@ export default function InventoryStatus() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          {!user?.warehouseId && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground shrink-0">Warehouse</span>
+              <Select
+                value={selectedWarehouseId}
+                onValueChange={setSelectedWarehouseId}
+              >
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="All Warehouses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Warehouses</SelectItem>
+                  {warehouses.map(wh => (
+                    <SelectItem key={wh.id} value={wh.id}>
+                      {wh.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground shrink-0">Stock Level Alert</span>
             <Select
@@ -284,7 +339,7 @@ export default function InventoryStatus() {
                 <TableHead className="w-[100px] text-right">Min Stock</TableHead>
                 
                 {/* Dynamically render header columns for each warehouse */}
-                {warehouses.map(wh => (
+                {activeWarehouses.map(wh => (
                   <TableHead key={wh.id} className="text-right w-[130px] font-medium text-zinc-800 dark:text-zinc-200">
                     {wh.name}
                   </TableHead>
@@ -297,14 +352,14 @@ export default function InventoryStatus() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5 + warehouses.length} className="h-48 text-center">
+                  <TableCell colSpan={5 + activeWarehouses.length} className="h-48 text-center">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
                     <span className="text-xs text-muted-foreground mt-2 block">Calculating real-time ledger records...</span>
                   </TableCell>
                 </TableRow>
               ) : paginatedStocks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5 + warehouses.length} className="h-28 text-center text-muted-foreground">
+                  <TableCell colSpan={5 + activeWarehouses.length} className="h-28 text-center text-muted-foreground">
                     No products matching your search criteria.
                   </TableCell>
                 </TableRow>
@@ -327,7 +382,7 @@ export default function InventoryStatus() {
                       </TableCell>
 
                       {/* Render stock in each warehouse column */}
-                      {warehouses.map(wh => {
+                      {activeWarehouses.map(wh => {
                         const stock = item.stocks[wh.id] || 0;
                         return (
                           <TableCell key={wh.id} className="text-right font-mono text-xs">

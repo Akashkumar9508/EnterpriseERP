@@ -166,7 +166,7 @@ function SearchableProductDropdown({
 }
 
 export default function ManageStockTransfer() {
-  const { canView, canCreate, canDelete } = usePermissions('/product');
+  const { canView, canCreate, canDelete } = usePermissions('/stocktransfer');
   const user = useAppSelector((state) => state.auth.user);
 
   // Core Data States

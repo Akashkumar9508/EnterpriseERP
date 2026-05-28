@@ -48,7 +48,7 @@ export default function CreatePurchaseInvoice() {
   const navigate = useNavigate();
   const { id: editId } = useParams<{ id: string }>();
   const isEditMode = !!editId;
-  const { canCreate } = usePermissions('/product');
+  const { canCreate } = usePermissions('/purchase-invoice/create');
   const user = useAppSelector((state) => state.auth.user);
 
   // Edit-mode loading
@@ -92,6 +92,13 @@ export default function CreatePurchaseInvoice() {
     );
   }, [products, dialogSearch]);
 
+  const filteredWarehouses = useMemo(() => {
+    if (user?.warehouseId) {
+      return warehouses.filter(w => w.id === user.warehouseId);
+    }
+    return warehouses;
+  }, [warehouses, user?.warehouseId]);
+
   useEffect(() => {
     if (selectingProductForIndex !== null) {
       setDialogSearch('');
@@ -116,7 +123,11 @@ export default function CreatePurchaseInvoice() {
         if (resWh?.success) {
           const whData = resWh.data || [];
           setWarehouses(whData);
-          if (whData.length > 0) setWarehouseId(whData[0].id || '');
+          if (user?.warehouseId) {
+            setWarehouseId(user.warehouseId);
+          } else if (whData.length > 0) {
+            setWarehouseId(whData[0].id || '');
+          }
         }
         if (resProd?.success) setProducts(resProd.data || []);
         if (resVar?.success) setAllVariants(resVar.data || []);
@@ -525,7 +536,7 @@ export default function CreatePurchaseInvoice() {
                 onChange={(e) => setWarehouseId(e.target.value)}
                 className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-zinc-900 text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
               >
-                {warehouses.map((w) => (
+                {filteredWarehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
                   </option>

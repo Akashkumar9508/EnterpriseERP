@@ -13,7 +13,7 @@ const axiosClient = axios.create({
 // 🔹 Request Interceptor — attaches JWT token to every request
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("bteowkeelnl")
+    const token = sessionStorage.getItem("bteowkeelnl")
     if (token) {
       
       config.headers.Authorization = `Bearer ${token}`
@@ -29,7 +29,7 @@ axiosClient.interceptors.response.use(
   (error) => {
     // If 401 Unauthorized, clear token and redirect to admin login
     if (error.response?.status === 401) {
-      localStorage.removeItem("bteowkeelnl")
+      sessionStorage.removeItem("bteowkeelnl")
       // Only redirect if not already on /admin login page
       if (window.location.pathname !== "/admin") {
         window.location.href = "/admin"

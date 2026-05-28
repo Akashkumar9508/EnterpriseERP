@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/pagination';
 import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
 import type { PurchaseInvoiceDto } from '@/types/PurchaseInvoiceDto';
@@ -60,16 +61,24 @@ import type { WarehouseDto } from '@/types/WarehouseDto';
 
 export default function ManagePurchaseInvoice() {
   const navigate = useNavigate();
-  const { canView, canCreate, canDelete } = usePermissions('/product');
+  const { canView, canCreate, canDelete } = usePermissions('/purchase-invoice');
+  const user = useAppSelector((state) => state.auth.user);
 
   // Core States
   const [invoices, setInvoices] = useState<PurchaseInvoiceDto[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const filteredWarehouses = useMemo(() => {
+    if (user?.warehouseId) {
+      return warehouses.filter(w => w.id === user.warehouseId);
+    }
+    return warehouses;
+  }, [warehouses, user?.warehouseId]);
+
   // Filter/Search States
   const [search, setSearch] = useState('');
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState('all');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(user?.warehouseId || 'all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -387,11 +396,11 @@ export default function ManagePurchaseInvoice() {
 
           <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
             <SelectTrigger className="w-[160px] h-9 shrink-0">
-              <SelectValue placeholder="All Warehouses" />
+              <SelectValue placeholder={user?.warehouseId ? (user.warehouseName || "Warehouse") : "All Warehouses"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Warehouses</SelectItem>
-              {warehouses.map((w) => (
+              {!user?.warehouseId && <SelectItem value="all">All Warehouses</SelectItem>}
+              {filteredWarehouses.map((w) => (
                 <SelectItem key={w.id} value={w.id || ''}>{w.name}</SelectItem>
               ))}
             </SelectContent>

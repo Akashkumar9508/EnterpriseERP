@@ -48,6 +48,7 @@ interface StaffDto {
   branchId: string;
   departmentId?: string;
   designationId?: string;
+  warehouseId?: string;
   fullName: string;
   email?: string;
   phone?: string;
@@ -57,6 +58,7 @@ interface StaffDto {
   isActive: boolean;
   departmentName?: string;
   designationName?: string;
+  warehouseName?: string;
 }
 
 interface DepartmentDto {
@@ -77,6 +79,7 @@ export default function ManageStaff() {
   const [staffList, setStaffList] = useState<StaffDto[]>([]);
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [designations, setDesignations] = useState<DesignationDto[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Pagination & Search state
@@ -103,7 +106,8 @@ export default function ManageStaff() {
           (s.email && s.email.toLowerCase().includes(search.toLowerCase())) ||
           (s.phone && s.phone.includes(search)) ||
           (s.departmentName && s.departmentName.toLowerCase().includes(search.toLowerCase())) ||
-          (s.designationName && s.designationName.toLowerCase().includes(search.toLowerCase()))
+          (s.designationName && s.designationName.toLowerCase().includes(search.toLowerCase())) ||
+          (s.warehouseName && s.warehouseName.toLowerCase().includes(search.toLowerCase()))
         );
         setTotalCount(filtered.length);
         
@@ -122,9 +126,10 @@ export default function ManageStaff() {
 
   const fetchMetadata = async () => {
     try {
-      const [deptRes, desRes]: any[] = await Promise.all([
+      const [deptRes, desRes, warehouseRes]: any[] = await Promise.all([
         axiosClient.get('/Department'),
-        axiosClient.get('/Designation')
+        axiosClient.get('/Designation'),
+        axiosClient.get('/Warehouse')
       ]);
 
       if (deptRes?.success) {
@@ -132,6 +137,9 @@ export default function ManageStaff() {
       }
       if (desRes?.success) {
         setDesignations(desRes.data || []);
+      }
+      if (warehouseRes?.success) {
+        setWarehouses(warehouseRes.data || []);
       }
     } catch (error) {
       console.error('Failed to fetch metadata', error);
@@ -168,6 +176,7 @@ export default function ManageStaff() {
       joiningDate: new Date().toISOString().split('T')[0],
       departmentId: '',
       designationId: '',
+      warehouseId: '',
       isActive: true
     });
     setEditingId(null);
@@ -184,6 +193,7 @@ export default function ManageStaff() {
       joiningDate: staff.joiningDate ? staff.joiningDate.split('T')[0] : '',
       departmentId: staff.departmentId || '',
       designationId: staff.designationId || '',
+      warehouseId: staff.warehouseId || '',
       isActive: staff.isActive ?? true
     });
     setEditingId(staff.id || null);
@@ -198,6 +208,7 @@ export default function ManageStaff() {
         branchId: user?.branchId,
         departmentId: data.departmentId === '' ? null : data.departmentId,
         designationId: data.designationId === '' ? null : data.designationId,
+        warehouseId: data.warehouseId === '' ? null : data.warehouseId,
         salary: data.salary ? Number(data.salary) : null
       };
       
@@ -288,6 +299,7 @@ export default function ManageStaff() {
                 <TableHead>Full Name</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Designation</TableHead>
+                <TableHead>Warehouse</TableHead>
                 <TableHead>Phone / Email</TableHead>
                 <TableHead>Join Date</TableHead>
                 <TableHead className="w-[100px]">Status</TableHead>
@@ -297,13 +309,13 @@ export default function ManageStaff() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
+                  <TableCell colSpan={9} className="h-24 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : staffList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                     No staff members found.
                   </TableCell>
                 </TableRow>
@@ -321,6 +333,7 @@ export default function ManageStaff() {
                     </TableCell>
                     <TableCell>{staff.departmentName || '-'}</TableCell>
                     <TableCell>{staff.designationName || '-'}</TableCell>
+                    <TableCell>{staff.warehouseName || '-'}</TableCell>
                     <TableCell>
                       <div className="text-sm">
                         <div>{staff.phone || '-'}</div>
@@ -485,6 +498,19 @@ export default function ManageStaff() {
                 placeholder="e.g. 35000"
                 {...register('salary')}
               />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-base text-zinc-200">Warehouse</label>
+              <select 
+                className="flex h-10 w-full rounded-md border border-input bg-zinc-950 px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-800"
+                {...register('warehouseId')}
+              >
+                <option value="">Select Warehouse</option>
+                {warehouses.map((wh) => (
+                  <option key={wh.id} value={wh.id}>{wh.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="flex flex-col gap-2">
