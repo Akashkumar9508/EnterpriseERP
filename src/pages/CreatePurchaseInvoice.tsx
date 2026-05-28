@@ -7,7 +7,13 @@ import {
   Search, 
   Save, 
   ArrowLeft, 
-  CheckCircle2
+  CheckCircle2,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  AlertTriangle,
+  PlusCircle,
+  Check
 } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -32,6 +38,7 @@ import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 import type { ProductDto } from '@/types/ProductDto';
 import type { WarehouseDto } from '@/types/WarehouseDto';
@@ -41,6 +48,56 @@ import type { ProductBatchDto } from '@/types/ProductBatchDto';
 import type { GstDto } from '@/types/GstDto';
 import type { PurchaseInvoiceDto } from '@/types/PurchaseInvoiceDto';
 import type { PurchaseInvoiceItemDto } from '@/types/PurchaseInvoiceItemDto';
+
+interface PreviewHeader {
+  supplierSearch: string;
+  supplierId: string;
+  warehouseSearch: string;
+  warehouseId: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  referenceNo: string;
+  remarks: string;
+  errors: {
+    supplier?: string;
+    warehouse?: string;
+    invoiceNo?: string;
+    invoiceDate?: string;
+  };
+}
+
+interface PreviewItem {
+  id: string;
+  productSearch: string;
+  productId: string;
+  productName: string;
+  productCode: string;
+  variantSearch: string;
+  productVariantId: string;
+  batchSearch: string;
+  productBatchId: string;
+  quantity: number;
+  freeQuantity: number;
+  purchaseRate: number;
+  mrp: number;
+  salesRate: number;
+  discountPercent: number;
+  taxPercent: number;
+  errors: {
+    product?: string;
+    quantity?: string;
+    freeQuantity?: string;
+    purchaseRate?: string;
+    mrp?: string;
+    salesRate?: string;
+    discountPercent?: string;
+    taxPercent?: string;
+    variant?: string;
+    batch?: string;
+    duplicate?: string;
+  };
+}
+
 
 
 
@@ -80,6 +137,13 @@ export default function CreatePurchaseInvoice() {
   // dialog product selection state
   const [selectingProductForIndex, setSelectingProductForIndex] = useState<number | null>(null);
   const [dialogSearch, setDialogSearch] = useState('');
+
+  // Excel import state
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewHeader, setPreviewHeader] = useState<PreviewHeader | null>(null);
+  const [previewItems, setPreviewItems] = useState<PreviewItem[]>([]);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const dialogFilteredProducts = useMemo(() => {
     if (!dialogSearch.trim()) return products;
@@ -441,6 +505,682 @@ export default function CreatePurchaseInvoice() {
     return allBatches.filter(b => b.productId === productId);
   };
 
+  const getRowValue = (row: any, searchTerms: string[]) => {
+    if (!row) return undefined;
+    const foundKey = Object.keys(row).find(k => 
+      searchTerms.some(term => k.toLowerCase().trim() === term.toLowerCase().trim() || k.toLowerCase().includes(term.toLowerCase()))
+    );
+    return foundKey ? row[foundKey] : undefined;
+  };
+
+  const parseExcelDate = (val: any) => {
+    if (!val) return '';
+    if (typeof val === 'number') {
+      const date = new Date((val - 25569) * 86400 * 1000);
+      return date.toISOString().split('T')[0];
+    }
+    const dateStr = String(val).trim();
+    const parsed = Date.parse(dateStr);
+    if (!isNaN(parsed)) {
+      return new Date(parsed).toISOString().split('T')[0];
+    }
+    return dateStr;
+  };
+
+  const downloadTemplate = () => {
+    const sampleSupplier = suppliers[0]?.name || 'Sample Supplier';
+    const sampleWarehouse = warehouses[0]?.name || 'Main Warehouse';
+    const sampleProductCode = products[0]?.productCode || 'PROD-001';
+    
+    const data = [
+      {
+        'Supplier Name': sampleSupplier,
+        'Warehouse Name': sampleWarehouse,
+        'Invoice No': 'INV-2026-0001',
+        'Invoice Date': new Date().toISOString().split('T')[0],
+        'Reference No': 'PO-12345',
+        'Remarks': 'Sample purchase invoice upload',
+        'Product Code / SKU / Barcode': sampleProductCode,
+        'Variant Name': '',
+        'Batch No': 'BATCH-001',
+        'Quantity': 10,
+        'Free Quantity': 1,
+        'Purchase Rate': products[0]?.purchaseRate || 100,
+        'MRP': products[0]?.mrp || 150,
+        'Sales Rate': products[0]?.salesRate || 130,
+        'Discount %': 5,
+        'Tax %': products[0]?.taxProfileId ? (taxProfiles.find(tp => tp.id === products[0].taxProfileId)?.igst || 18) : 18,
+      },
+      {
+        'Supplier Name': '',
+        'Warehouse Name': '',
+        'Invoice No': '',
+        'Invoice Date': '',
+        'Reference No': '',
+        'Remarks': '',
+        'Product Code / SKU / Barcode': products[1]?.productCode || 'PROD-002',
+        'Variant Name': '',
+        'Batch No': 'BATCH-001',
+        'Quantity': 5,
+        'Free Quantity': 0,
+        'Purchase Rate': products[1]?.purchaseRate || 200,
+        'MRP': products[1]?.mrp || 300,
+        'Sales Rate': products[1]?.salesRate || 260,
+        'Discount %': 0,
+        'Tax %': products[1]?.taxProfileId ? (taxProfiles.find(tp => tp.id === products[1].taxProfileId)?.igst || 12) : 12,
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    
+    worksheet['!cols'] = [
+      { wch: 25 }, // Supplier Name
+      { wch: 20 }, // Warehouse Name
+      { wch: 15 }, // Invoice No
+      { wch: 12 }, // Invoice Date
+      { wch: 15 }, // Reference No
+      { wch: 30 }, // Remarks
+      { wch: 25 }, // Product Code / SKU / Barcode
+      { wch: 15 }, // Variant Name
+      { wch: 12 }, // Batch No
+      { wch: 8 },  // Quantity
+      { wch: 10 }, // Free Quantity
+      { wch: 12 }, // Purchase Rate
+      { wch: 10 }, // MRP
+      { wch: 12 }, // Sales Rate
+      { wch: 10 }, // Discount %
+      { wch: 8 },  // Tax %
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchase Invoice');
+    XLSX.writeFile(workbook, 'PurchaseInvoice_Template.xlsx');
+    toast.success('Excel Template downloaded successfully!');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    parseFile(file);
+    e.target.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    parseFile(file);
+  };
+
+  const parseFile = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'xls' && ext !== 'csv') {
+      toast.error('Unsupported file format. Please upload a .xlsx, .xls or .csv file.');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(10);
+    
+    const reader = new FileReader();
+    reader.onprogress = (data) => {
+      if (data.lengthComputable) {
+        const progress = Math.round((data.loaded / data.total) * 50);
+        setUploadProgress(progress);
+      }
+    };
+    
+    reader.onload = (e) => {
+      setUploadProgress(60);
+      try {
+        setTimeout(() => {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          setUploadProgress(80);
+          
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          setUploadProgress(95);
+
+          if (rawRows.length < 2) {
+            toast.error('The file does not contain any data rows.');
+            setIsUploading(false);
+            return;
+          }
+
+          const headers = rawRows[0].map(h => String(h).trim());
+          const parsedData = rawRows.slice(1).map(row => {
+            const rowObj: any = {};
+            headers.forEach((header, index) => {
+              rowObj[header] = row[index] !== undefined ? row[index] : '';
+            });
+            return rowObj;
+          });
+
+          const validRows = parsedData.filter(row => {
+            const val = getRowValue(row, ['product', 'code', 'barcode', 'sku']);
+            return val !== undefined && String(val).trim() !== '';
+          });
+
+          if (validRows.length === 0) {
+            toast.error('No valid items found in the file. Ensure the "Product Code / SKU / Barcode" column is filled.');
+            setIsUploading(false);
+            return;
+          }
+
+          setTimeout(() => {
+            setUploadProgress(100);
+            setTimeout(() => {
+              setIsUploading(false);
+              processImportedData(validRows);
+            }, 200);
+          }, 100);
+        }, 50);
+      } catch (err) {
+        console.error(err);
+        toast.error('Error parsing Excel data. Please make sure the structure is correct.');
+        setIsUploading(false);
+      }
+    };
+    
+    reader.onerror = () => {
+      toast.error('Failed to read the file.');
+      setIsUploading(false);
+    };
+    
+    reader.readAsArrayBuffer(file);
+  };
+
+  const validatePreviewData = (header: PreviewHeader, itemsList: PreviewItem[]): { header: PreviewHeader; items: PreviewItem[]; isValid: boolean } => {
+    let isAllValid = true;
+
+    const headerErrors: typeof header.errors = {};
+    
+    if (!header.supplierId) {
+      headerErrors.supplier = 'Supplier is required.';
+      isAllValid = false;
+    } else {
+      const matchedSup = suppliers.find(s => s.id === header.supplierId);
+      if (!matchedSup) {
+        headerErrors.supplier = 'Invalid supplier selected.';
+        isAllValid = false;
+      }
+    }
+
+    if (!header.warehouseId) {
+      headerErrors.warehouse = 'Warehouse is required.';
+      isAllValid = false;
+    } else {
+      const matchedWh = warehouses.find(w => w.id === header.warehouseId);
+      if (!matchedWh) {
+        headerErrors.warehouse = 'Invalid warehouse selected.';
+        isAllValid = false;
+      }
+    }
+
+    if (!header.invoiceNo.trim()) {
+      headerErrors.invoiceNo = 'Invoice number is required.';
+      isAllValid = false;
+    }
+
+    if (!header.invoiceDate) {
+      headerErrors.invoiceDate = 'Invoice date is required.';
+      isAllValid = false;
+    } else {
+      const parsedDate = Date.parse(header.invoiceDate);
+      if (isNaN(parsedDate)) {
+        headerErrors.invoiceDate = 'Invalid date format.';
+        isAllValid = false;
+      }
+    }
+
+    const validatedHeader = {
+      ...header,
+      errors: headerErrors
+    };
+
+    const validatedItems = itemsList.map((item, idx) => {
+      const itemErrors: typeof item.errors = {};
+
+      if (!item.productId) {
+        itemErrors.product = item.productSearch 
+          ? `Product "${item.productSearch}" not found in catalogue.` 
+          : 'Product selection is required.';
+        isAllValid = false;
+      }
+
+      if (item.productVariantId) {
+        const prodVariants = allVariants.filter(v => v.productId === item.productId);
+        const matchedVar = prodVariants.find(v => v.id === item.productVariantId);
+        if (!matchedVar) {
+          itemErrors.variant = 'Selected variant is invalid.';
+          isAllValid = false;
+        }
+      } else if (item.variantSearch) {
+        itemErrors.variant = `Variant "${item.variantSearch}" not found.`;
+        isAllValid = false;
+      }
+
+      if (item.productBatchId) {
+        const prodBatches = allBatches.filter(b => b.productId === item.productId);
+        const matchedB = prodBatches.find(b => b.id === item.productBatchId);
+        if (!matchedB) {
+          itemErrors.batch = 'Selected batch is invalid.';
+          isAllValid = false;
+        }
+      } else if (item.batchSearch) {
+        itemErrors.batch = `Batch "${item.batchSearch}" not found.`;
+        isAllValid = false;
+      }
+
+      if (item.quantity === undefined || item.quantity === null || isNaN(item.quantity)) {
+        itemErrors.quantity = 'Quantity is required.';
+        isAllValid = false;
+      } else if (item.quantity <= 0) {
+        itemErrors.quantity = 'Quantity must be greater than 0.';
+        isAllValid = false;
+      }
+
+      if (item.freeQuantity < 0 || isNaN(item.freeQuantity)) {
+        itemErrors.freeQuantity = 'Free quantity cannot be negative.';
+        isAllValid = false;
+      }
+
+      if (item.purchaseRate < 0 || isNaN(item.purchaseRate)) {
+        itemErrors.purchaseRate = 'Purchase rate cannot be negative.';
+        isAllValid = false;
+      }
+      if (item.mrp < 0 || isNaN(item.mrp)) {
+        itemErrors.mrp = 'MRP cannot be negative.';
+        isAllValid = false;
+      }
+      if (item.salesRate < 0 || isNaN(item.salesRate)) {
+        itemErrors.salesRate = 'Sales rate cannot be negative.';
+        isAllValid = false;
+      }
+
+      if (item.discountPercent < 0 || item.discountPercent > 100 || isNaN(item.discountPercent)) {
+        itemErrors.discountPercent = 'Discount % must be between 0 and 100.';
+        isAllValid = false;
+      }
+      if (item.taxPercent < 0 || item.taxPercent > 100 || isNaN(item.taxPercent)) {
+        itemErrors.taxPercent = 'Tax % must be between 0 and 100.';
+        isAllValid = false;
+      }
+
+      const isDuplicate = itemsList.some((otherItem, otherIdx) => {
+        if (otherIdx === idx) return false;
+        return (
+          otherItem.productId &&
+          otherItem.productId === item.productId &&
+          otherItem.productVariantId === item.productVariantId &&
+          otherItem.productBatchId === item.productBatchId
+        );
+      });
+      if (isDuplicate) {
+        itemErrors.duplicate = 'Duplicate product/variant/batch line.';
+        isAllValid = false;
+      }
+
+      return {
+        ...item,
+        errors: itemErrors
+      };
+    });
+
+    return {
+      header: validatedHeader,
+      items: validatedItems,
+      isValid: isAllValid
+    };
+  };
+
+  const processImportedData = (rows: any[]) => {
+    const firstRow = rows[0];
+
+    const supplierSearch = String(getRowValue(firstRow, ['supplier']) || '').trim();
+    const warehouseSearch = String(getRowValue(firstRow, ['warehouse']) || '').trim();
+    const invoiceNo = String(getRowValue(firstRow, ['invoice no', 'invoice_no']) || '').trim();
+    const invoiceDateRaw = getRowValue(firstRow, ['invoice date', 'invoice_date']);
+    const invoiceDate = parseExcelDate(invoiceDateRaw);
+    const referenceNo = String(getRowValue(firstRow, ['reference', 'po']) || '').trim();
+    const remarks = String(getRowValue(firstRow, ['remarks', 'remark', 'note']) || '').trim();
+
+    const matchedSupplier = suppliers.find(s => 
+      s.name.toLowerCase() === supplierSearch.toLowerCase()
+    );
+    const matchedWarehouse = warehouses.find(w => 
+      w.name.toLowerCase() === warehouseSearch.toLowerCase()
+    ) || warehouses[0];
+
+    const initialHeader: PreviewHeader = {
+      supplierSearch,
+      supplierId: matchedSupplier ? (matchedSupplier.id || '') : '',
+      warehouseSearch,
+      warehouseId: matchedWarehouse ? (matchedWarehouse.id || '') : '',
+      invoiceNo,
+      invoiceDate: invoiceDate || new Date().toISOString().split('T')[0],
+      referenceNo,
+      remarks,
+      errors: {}
+    };
+
+    const parsedItems: PreviewItem[] = rows.map((row, idx) => {
+      const productSearch = String(getRowValue(row, ['product', 'code', 'barcode', 'sku']) || '').trim();
+      const variantSearch = String(getRowValue(row, ['variant']) || '').trim();
+      const batchSearch = String(getRowValue(row, ['batch']) || '').trim();
+      
+      const quantity = Number(getRowValue(row, ['qty', 'quantity'])) || 1;
+      const freeQuantity = Number(getRowValue(row, ['free'])) || 0;
+      
+      const matchedProduct = products.find(p => 
+        (p.productCode && p.productCode.toLowerCase() === productSearch.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase() === productSearch.toLowerCase()) ||
+        (p.barcode && p.barcode.toLowerCase() === productSearch.toLowerCase()) ||
+        (p.name && p.name.toLowerCase() === productSearch.toLowerCase())
+      );
+
+      let productId = '';
+      let productName = '';
+      let productCode = '';
+      let purchaseRate = Number(getRowValue(row, ['purchase rate', 'purchase_rate', 'rate'])) || 0;
+      let mrp = Number(getRowValue(row, ['mrp'])) || 0;
+      let salesRate = Number(getRowValue(row, ['sales rate', 'sales_rate'])) || 0;
+      let discountPercent = Number(getRowValue(row, ['discount', 'disc'])) || 0;
+      let taxPercent = Number(getRowValue(row, ['tax', 'gst', 'vat'])) || 0;
+
+      if (matchedProduct) {
+        productId = matchedProduct.id || '';
+        productName = matchedProduct.name || '';
+        productCode = matchedProduct.productCode || '';
+        
+        if (purchaseRate === 0) purchaseRate = matchedProduct.purchaseRate || 0;
+        if (mrp === 0) mrp = matchedProduct.mrp || 0;
+        if (salesRate === 0) salesRate = matchedProduct.salesRate || 0;
+        
+        if (taxPercent === 0 && matchedProduct.taxProfileId) {
+          const taxProfile = taxProfiles.find(tp => tp.id === matchedProduct.taxProfileId);
+          if (taxProfile) taxPercent = taxProfile.igst;
+        }
+      }
+
+      let productVariantId = '';
+      if (matchedProduct && variantSearch) {
+        const prodVariants = allVariants.filter(v => v.productId === matchedProduct.id);
+        const matchedVar = prodVariants.find(v => 
+          (v.variantCombination && v.variantCombination.toLowerCase() === variantSearch.toLowerCase()) ||
+          (v.sku && v.sku.toLowerCase() === variantSearch.toLowerCase())
+        );
+        if (matchedVar) {
+          productVariantId = matchedVar.id || '';
+          if (purchaseRate === (matchedProduct.purchaseRate || 0)) purchaseRate = matchedVar.purchaseRate || purchaseRate;
+          if (mrp === (matchedProduct.mrp || 0)) mrp = matchedVar.mrp || mrp;
+          if (salesRate === (matchedProduct.salesRate || 0)) salesRate = matchedVar.salesRate || salesRate;
+        }
+      }
+
+      let productBatchId = '';
+      if (matchedProduct && batchSearch) {
+        const prodBatches = allBatches.filter(b => b.productId === matchedProduct.id);
+        const matchedB = prodBatches.find(b => 
+          b.batchNo && b.batchNo.toLowerCase() === batchSearch.toLowerCase()
+        );
+        if (matchedB) {
+          productBatchId = matchedB.id || '';
+          if (mrp === (matchedProduct.mrp || 0)) mrp = matchedB.mrp || mrp;
+        }
+      }
+
+      return {
+        id: `imported-${idx}-${Math.random()}`,
+        productSearch,
+        productId,
+        productName,
+        productCode,
+        variantSearch,
+        productVariantId,
+        batchSearch,
+        productBatchId,
+        quantity,
+        freeQuantity,
+        purchaseRate,
+        mrp,
+        salesRate,
+        discountPercent,
+        taxPercent,
+        errors: {}
+      };
+    });
+
+    const validationResult = validatePreviewData(initialHeader, parsedItems);
+    setPreviewHeader(validationResult.header);
+    setPreviewItems(validationResult.items);
+    setIsPreviewOpen(true);
+    toast.info('File parsed successfully! Please review items and errors.');
+  };
+
+  const handlePreviewHeaderChange = (field: keyof PreviewHeader, value: any) => {
+    if (!previewHeader) return;
+    const updatedHeader = {
+      ...previewHeader,
+      [field]: value
+    };
+    
+    if (field === 'supplierId') {
+      const matched = suppliers.find(s => s.id === value);
+      updatedHeader.supplierSearch = matched ? matched.name : '';
+    }
+    if (field === 'warehouseId') {
+      const matched = warehouses.find(w => w.id === value);
+      updatedHeader.warehouseSearch = matched ? matched.name : '';
+    }
+
+    const validation = validatePreviewData(updatedHeader, previewItems);
+    setPreviewHeader(validation.header);
+    setPreviewItems(validation.items);
+  };
+
+  const handlePreviewItemChange = (index: number, field: keyof PreviewItem, value: any) => {
+    const updatedItems = [...previewItems];
+    
+    if (field === 'productId') {
+      const prod = products.find(p => p.id === value);
+      if (prod) {
+        let defaultTaxRate = 0;
+        if (prod.taxProfileId) {
+          const taxProfile = taxProfiles.find(tp => tp.id === prod.taxProfileId);
+          if (taxProfile) defaultTaxRate = taxProfile.igst;
+        }
+        updatedItems[index] = {
+          ...updatedItems[index],
+          productId: prod.id || '',
+          productName: prod.name || '',
+          productCode: prod.productCode || '',
+          productVariantId: '',
+          productBatchId: '',
+          purchaseRate: prod.purchaseRate || 0,
+          salesRate: prod.salesRate || 0,
+          mrp: prod.mrp || 0,
+          taxPercent: defaultTaxRate
+        };
+      } else {
+        updatedItems[index] = {
+          ...updatedItems[index],
+          productId: '',
+          productName: '',
+          productCode: '',
+          productVariantId: '',
+          productBatchId: '',
+        };
+      }
+    } else if (field === 'productVariantId') {
+      updatedItems[index].productVariantId = value;
+      const variant = allVariants.find(v => v.id === value);
+      if (variant) {
+        updatedItems[index].purchaseRate = variant.purchaseRate || updatedItems[index].purchaseRate;
+        updatedItems[index].salesRate = variant.salesRate || updatedItems[index].salesRate;
+        updatedItems[index].mrp = variant.mrp || updatedItems[index].mrp;
+      }
+    } else if (field === 'productBatchId') {
+      updatedItems[index].productBatchId = value;
+      const batch = allBatches.find(b => b.id === value);
+      if (batch) {
+        updatedItems[index].mrp = batch.mrp || updatedItems[index].mrp;
+      }
+    } else {
+      updatedItems[index] = {
+        ...updatedItems[index],
+        [field]: value
+      };
+    }
+
+    if (previewHeader) {
+      const validation = validatePreviewData(previewHeader, updatedItems);
+      setPreviewHeader(validation.header);
+      setPreviewItems(validation.items);
+    }
+  };
+
+  const handleAddPreviewItem = () => {
+    const newItem: PreviewItem = {
+      id: `imported-new-${Math.random()}`,
+      productSearch: '',
+      productId: '',
+      productName: '',
+      productCode: '',
+      variantSearch: '',
+      productVariantId: '',
+      batchSearch: '',
+      productBatchId: '',
+      quantity: 1,
+      freeQuantity: 0,
+      purchaseRate: 0,
+      mrp: 0,
+      salesRate: 0,
+      discountPercent: 0,
+      taxPercent: 0,
+      errors: {}
+    };
+    const updatedItems = [...previewItems, newItem];
+    if (previewHeader) {
+      const validation = validatePreviewData(previewHeader, updatedItems);
+      setPreviewHeader(validation.header);
+      setPreviewItems(validation.items);
+    }
+  };
+
+  const handleRemovePreviewItem = (index: number) => {
+    const updatedItems = [...previewItems];
+    updatedItems.splice(index, 1);
+    if (previewHeader) {
+      const validation = validatePreviewData(previewHeader, updatedItems);
+      setPreviewHeader(validation.header);
+      setPreviewItems(validation.items);
+    }
+  };
+
+  const handleConfirmSubmit = async (status: number) => {
+    if (!previewHeader) return;
+    const validation = validatePreviewData(previewHeader, previewItems);
+    setPreviewHeader(validation.header);
+    setPreviewItems(validation.items);
+
+    if (!validation.isValid) {
+      toast.error('Please fix all validation errors before submitting.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      let subTotal = 0;
+      let lineDiscountsSum = 0;
+      let totalTax = 0;
+      
+      const formattedItems = previewItems.map(item => {
+        const qty = Number(item.quantity) || 0;
+        const rate = Number(item.purchaseRate) || 0;
+        const discPct = Number(item.discountPercent) || 0;
+        const taxPct = Number(item.taxPercent) || 0;
+
+        const amount = qty * rate;
+        const discountAmount = Number((amount * (discPct / 100)).toFixed(2));
+        const taxableAmount = amount - discountAmount;
+        const taxAmount = Number((taxableAmount * (taxPct / 100)).toFixed(2));
+        const totalAmount = Number((taxableAmount + taxAmount).toFixed(2));
+
+        subTotal += amount;
+        lineDiscountsSum += discountAmount;
+        totalTax += taxAmount;
+
+        return {
+          productId: item.productId,
+          productVariantId: item.productVariantId || null as any,
+          productBatchId: item.productBatchId || null as any,
+          quantity: qty,
+          freeQuantity: Number(item.freeQuantity) || 0,
+          purchaseRate: rate,
+          salesRate: Number(item.salesRate) || 0,
+          mrp: Number(item.mrp) || 0,
+          discountPercent: discPct,
+          discountAmount: discountAmount,
+          taxPercent: taxPct,
+          taxAmount: taxAmount,
+          totalAmount: totalAmount
+        };
+      });
+
+      const netAmount = Number((subTotal - lineDiscountsSum + totalTax).toFixed(2));
+
+      const payload: PurchaseInvoiceDto = {
+        companyId: user?.companyId || 'F6579BDB-C05B-4AF0-9404-7EBC3C15B0D8',
+        branchId: user?.branchId || 'F6579BDB-C05B-4AF0-9404-7EBC3C15B0D8',
+        supplierId: previewHeader.supplierId,
+        warehouseId: previewHeader.warehouseId,
+        invoiceNo: previewHeader.invoiceNo,
+        referenceNo: previewHeader.referenceNo,
+        invoiceDate: new Date(previewHeader.invoiceDate).toISOString(),
+        remarks: previewHeader.remarks,
+        subTotal: Number(subTotal.toFixed(2)),
+        discountAmount: Number(lineDiscountsSum.toFixed(2)),
+        taxAmount: Number(totalTax.toFixed(2)),
+        netAmount: netAmount,
+        status,
+        items: formattedItems
+      };
+
+      let response: any;
+      if (isEditMode && editId) {
+        response = await axiosClient.put(`/PurchaseInvoice/${editId}`, payload);
+      } else {
+        response = await axiosClient.post('/PurchaseInvoice', payload);
+      }
+
+      if (response?.success) {
+        toast.success(
+          status === 2
+            ? 'Purchase Invoice posted and stock updated!'
+            : isEditMode
+              ? 'Purchase Invoice draft updated successfully!'
+              : 'Purchase Invoice saved as draft!'
+        );
+        setIsPreviewOpen(false);
+        navigate('/purchase-invoice');
+      } else {
+        toast.error(response?.message || 'Failed to save purchase invoice.');
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'An error occurred while saving.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!canCreate) {
     return (
       <Page>
@@ -511,6 +1251,69 @@ export default function CreatePurchaseInvoice() {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Quick Excel Import Section */}
+          <Section className="bg-card/50 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-indigo-500" />
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Quick Excel Import</h2>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Quickly import invoice headers and items from an Excel or CSV file. 
+                Download our pre-structured template, populate your purchase data, and drop the file here to import instantly.
+              </p>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={downloadTemplate}
+                className="h-8.5 text-xs gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:text-indigo-400 dark:border-indigo-900 dark:hover:bg-indigo-950/20"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Excel Template
+              </Button>
+            </div>
+
+            <div
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className="relative border-2 border-dashed border-zinc-200 hover:border-indigo-400 dark:border-zinc-800 dark:hover:border-indigo-600 rounded-lg p-6 flex flex-col items-center justify-center gap-2 bg-muted/10 hover:bg-muted/20 transition-all duration-200 cursor-pointer text-center group"
+              onClick={() => document.getElementById('excel-file-input')?.click()}
+            >
+              <input
+                id="excel-file-input"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              
+              {isUploading ? (
+                <div className="space-y-2 w-full max-w-[200px] flex flex-col items-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                  <span className="text-xs text-muted-foreground font-medium">Parsing Excel Data...</span>
+                  <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-indigo-500 h-full transition-all duration-300 rounded-full" 
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 text-zinc-400 group-hover:text-indigo-500 transition-colors duration-200" />
+                  <div>
+                    <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50 block">
+                      Drag & drop file here
+                    </span>
+                    <span className="text-[10px] text-zinc-400 mt-0.5 block">
+                      Supports .xlsx, .xls, .csv up to 10MB
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          </Section>
+
           {/* Header Metadata Section */}
           <Section className="bg-card border border-border rounded-xl p-5 shadow-xs grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-1">
@@ -909,6 +1712,414 @@ export default function CreatePurchaseInvoice() {
             >
               Cancel
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Preview Dialog Modal */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="w-screen h-screen max-w-none max-h-none sm:max-w-none sm:w-screen sm:h-screen sm:max-h-none fixed top-0 left-0 translate-x-0 translate-y-0 sm:top-0 sm:left-0 sm:translate-x-0 sm:translate-y-0 flex flex-col p-6 gap-4 bg-popover rounded-none border-0 shadow-none ring-0">
+          <DialogHeader className="border-b border-border pb-3 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-indigo-500" />
+                Preview & Validate Purchase Import
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Review parsed values and resolve any highlighted validation errors before final submission.
+              </p>
+            </div>
+            
+            <div className="flex gap-4 text-xs font-mono pr-6">
+              <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 px-3 py-1.5 rounded-lg flex flex-col items-center">
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-450 uppercase font-semibold">Total Rows</span>
+                <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{previewItems.length}</span>
+              </div>
+              <div className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/50 px-3 py-1.5 rounded-lg flex flex-col items-center">
+                <span className="text-[10px] text-red-600 dark:text-red-450 uppercase font-semibold">Errors</span>
+                <span className="text-sm font-bold text-red-700 dark:text-red-450 font-mono">
+                  {previewItems.reduce((acc, item) => acc + Object.keys(item.errors).length, 0) + 
+                   (previewHeader ? Object.keys(previewHeader.errors).length : 0)}
+                </span>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {previewHeader && (
+            <div className="space-y-4 flex-1 overflow-y-auto min-h-0 pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-muted/20 p-4 rounded-xl border border-border">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-zinc-550 dark:text-zinc-400 uppercase tracking-wider block">
+                    Supplier {previewHeader.supplierSearch && `(${previewHeader.supplierSearch})`}
+                  </label>
+                  <select
+                    value={previewHeader.supplierId}
+                    onChange={(e) => handlePreviewHeaderChange('supplierId', e.target.value)}
+                    className={`w-full h-8.5 px-3 rounded-md border text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
+                      previewHeader.errors.supplier ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                    }`}
+                  >
+                    <option value="">Select Supplier...</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  {previewHeader.errors.supplier && (
+                    <span className="text-[10px] text-red-500 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.supplier}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                    Warehouse {previewHeader.warehouseSearch && `(${previewHeader.warehouseSearch})`}
+                  </label>
+                  <select
+                    value={previewHeader.warehouseId}
+                    onChange={(e) => handlePreviewHeaderChange('warehouseId', e.target.value)}
+                    className={`w-full h-8.5 px-3 rounded-md border text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
+                      previewHeader.errors.warehouse ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                    }`}
+                  >
+                    <option value="">Select Warehouse...</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                  {previewHeader.errors.warehouse && (
+                    <span className="text-[10px] text-red-500 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.warehouse}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                    Supplier Invoice No.
+                  </label>
+                  <Input
+                    type="text"
+                    value={previewHeader.invoiceNo}
+                    onChange={(e) => handlePreviewHeaderChange('invoiceNo', e.target.value)}
+                    className={`h-8.5 text-xs ${previewHeader.errors.invoiceNo ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  />
+                  {previewHeader.errors.invoiceNo && (
+                    <span className="text-[10px] text-red-500 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.invoiceNo}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                    Invoice Date
+                  </label>
+                  <Input
+                    type="date"
+                    value={previewHeader.invoiceDate}
+                    onChange={(e) => handlePreviewHeaderChange('invoiceDate', e.target.value)}
+                    className={`h-8.5 text-xs ${previewHeader.errors.invoiceDate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  />
+                  {previewHeader.errors.invoiceDate && (
+                    <span className="text-[10px] text-red-500 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.invoiceDate}
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                    Reference / PO Number
+                  </label>
+                  <Input
+                    type="text"
+                    value={previewHeader.referenceNo}
+                    onChange={(e) => handlePreviewHeaderChange('referenceNo', e.target.value)}
+                    className="h-8.5 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                    Remarks
+                  </label>
+                  <Input
+                    type="text"
+                    value={previewHeader.remarks}
+                    onChange={(e) => handlePreviewHeaderChange('remarks', e.target.value)}
+                    className="h-8.5 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="border border-border rounded-xl shadow-xs overflow-hidden bg-card">
+                <div className="p-3 border-b border-border bg-muted/20 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-50 uppercase tracking-wider">Line Items</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddPreviewItem}
+                    className="h-7 text-[10px] gap-1 px-2.5 py-1 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/20"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5" /> Add Row
+                  </Button>
+                </div>
+
+                <div className="w-full overflow-x-auto">
+                  <table className="w-full border-collapse text-xs text-left min-w-[1300px]">
+                    <thead className="bg-muted/10 font-bold border-b border-border">
+                      <tr>
+                        <th className="w-[45px] p-2 text-center">Status</th>
+                        <th className="w-[180px] p-2">Excel Input</th>
+                        <th className="w-[200px] p-2">Product Match</th>
+                        <th className="w-[110px] p-2">Variant</th>
+                        <th className="w-[100px] p-2">Batch</th>
+                        <th className="w-[70px] p-2 text-right">Qty</th>
+                        <th className="w-[75px] p-2 text-right">Free Qty</th>
+                        <th className="w-[85px] p-2 text-right">Rate</th>
+                        <th className="w-[85px] p-2 text-right">MRP</th>
+                        <th className="w-[85px] p-2 text-right">Sales Rate</th>
+                        <th className="w-[65px] p-2 text-right">Disc %</th>
+                        <th className="w-[65px] p-2 text-right">Tax %</th>
+                        <th className="w-[95px] p-2 text-right">Total</th>
+                        <th className="w-[40px] p-2 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {previewItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={14} className="py-8 text-center text-xs text-muted-foreground">
+                            No items to preview. Add a row to get started.
+                          </td>
+                        </tr>
+                      ) : (
+                        previewItems.map((item, idx) => {
+                          const rowHasErrors = Object.keys(item.errors).length > 0;
+                          const itemVariants = getVariantsForProduct(item.productId);
+                          const itemBatches = getBatchesForProduct(item.productId);
+                          const rowTotal = (Number(item.quantity) || 0) * (Number(item.purchaseRate) || 0);
+                          const rowDisc = rowTotal * ((Number(item.discountPercent) || 0) / 100);
+                          const rowTax = (rowTotal - rowDisc) * ((Number(item.taxPercent) || 0) / 100);
+                          const rowNet = rowTotal - rowDisc + rowTax;
+
+                          return (
+                            <tr 
+                              key={item.id} 
+                              className={`align-middle transition-colors duration-150 ${
+                                rowHasErrors 
+                                  ? 'bg-red-500/5 hover:bg-red-500/10 dark:bg-red-950/10 dark:hover:bg-red-950/20' 
+                                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
+                              }`}
+                            >
+                              <td className="p-2 text-center">
+                                {rowHasErrors ? (
+                                  <div className="inline-flex items-center justify-center p-1 rounded-full bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 group relative cursor-help">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <div className="absolute left-6 top-1/2 -translate-y-1/2 hidden group-hover:block z-50 bg-popover border border-border p-2.5 rounded-lg shadow-md w-72 text-left text-zinc-900 dark:text-zinc-50 font-normal">
+                                      <h4 className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-1.5">Validation Errors (Row {idx+1})</h4>
+                                      <ul className="list-disc pl-3.5 space-y-1 text-[11px] leading-relaxed text-muted-foreground">
+                                        {Object.entries(item.errors).map(([key, msg]) => (
+                                          <li key={key} className="text-zinc-800 dark:text-zinc-200">
+                                            <span className="font-semibold capitalize">{key}:</span> {msg}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center p-1 rounded-full bg-green-100 dark:bg-green-950/40 text-green-600 dark:text-green-400">
+                                    <Check className="h-4 w-4" />
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-2 text-zinc-550 dark:text-zinc-400 font-mono text-[10px] truncate max-w-[180px]">
+                                {item.productSearch || <span className="italic text-zinc-450 font-sans">Added Row</span>}
+                              </td>
+
+                              <td className="p-2">
+                                <select
+                                  value={item.productId}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'productId', e.target.value)}
+                                  className={`w-full h-8 px-2 rounded-md border text-xs focus:outline-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
+                                    item.errors.product ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                                  }`}
+                                >
+                                  <option value="">Select Product...</option>
+                                  {products.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name} ({p.productCode})</option>
+                                  ))}
+                                </select>
+                              </td>
+
+                              <td className="p-2">
+                                <select
+                                  value={item.productVariantId}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'productVariantId', e.target.value)}
+                                  disabled={!item.productId || itemVariants.length === 0}
+                                  className={`w-full h-8 px-1.5 rounded-md border text-xs focus:outline-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                    item.errors.variant ? 'border-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                                  }`}
+                                >
+                                  <option value="">Base Product</option>
+                                  {itemVariants.map(v => (
+                                    <option key={v.id} value={v.id}>{v.variantCombination || v.sku}</option>
+                                  ))}
+                                </select>
+                              </td>
+
+                              <td className="p-2">
+                                <select
+                                  value={item.productBatchId}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'productBatchId', e.target.value)}
+                                  disabled={!item.productId || itemBatches.length === 0}
+                                  className={`w-full h-8 px-1.5 rounded-md border text-xs focus:outline-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                    item.errors.batch ? 'border-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                                  }`}
+                                >
+                                  <option value="">No Batch</option>
+                                  {itemBatches.map(b => (
+                                    <option key={b.id} value={b.id}>{b.batchNo}</option>
+                                  ))}
+                                </select>
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'quantity', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.quantity ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  value={item.freeQuantity}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'freeQuantity', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.freeQuantity ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.purchaseRate}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'purchaseRate', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.purchaseRate ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.mrp}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'mrp', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.mrp ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.salesRate}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'salesRate', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.salesRate ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={item.discountPercent}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'discountPercent', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.discountPercent ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={item.taxPercent}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'taxPercent', Number(e.target.value))}
+                                  className={`h-8 text-right font-mono px-1.5 py-1 text-xs ${item.errors.taxPercent ? 'border-red-500' : ''}`}
+                                />
+                              </td>
+
+                              <td className="p-2 text-right font-mono text-xs font-semibold pr-3">
+                                ₹{rowNet.toFixed(2)}
+                              </td>
+
+                              <td className="p-2 text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemovePreviewItem(idx)}
+                                  className="h-7 w-7 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t border-border pt-3 flex items-center justify-between sm:justify-between w-full">
+            <div className="flex gap-4 items-center">
+              <span className="text-[11px] text-muted-foreground font-medium">
+                * Hover over the status icon to see specific cell validation errors.
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                type="button"
+                className="h-9 text-xs px-4"
+                onClick={() => setIsPreviewOpen(false)}
+              >
+                Cancel & Exit
+              </Button>
+              <Button
+                type="button"
+                onClick={() => handleConfirmSubmit(1)}
+                disabled={isSaving}
+                className="h-9 text-xs px-4"
+              >
+                {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Save as Draft
+              </Button>
+              <Button
+                type="button"
+                onClick={() => handleConfirmSubmit(2)}
+                disabled={isSaving}
+                className="h-9 text-xs px-4 bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Confirm & Post Invoice
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

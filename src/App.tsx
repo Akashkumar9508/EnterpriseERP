@@ -30,6 +30,7 @@ import ManageWarehouse from '@/pages/ManageWarehouse';
 import ManageHSNCode from '@/pages/ManageHSNCode';
 import ManageCustomer from '@/pages/ManageCustomer';
 import ManageSupplier from '@/pages/ManageSupplier';
+import PurchaseReports from '@/pages/PurchaseReports';
 import Layout from '@/components/layout';
 import { useAppSelector } from '@/store/hooks';
 import { Toaster } from '@/components/ui/sonner';
@@ -77,6 +78,7 @@ export function App() {
                 <Route path="purchase-invoice" element={<ManagePurchaseInvoice />} />
                 <Route path="purchase-invoice/create" element={<CreatePurchaseInvoice />} />
                 <Route path="purchase-invoice/edit/:id" element={<CreatePurchaseInvoice />} />
+                <Route path="purchase-reports" element={<PurchaseReports />} />
                 <Route path="brand" element={<ManageBrand />} />
                 <Route path="manufacturer" element={<ManageManufacturer />} />
                 <Route path="warehouse" element={<ManageWarehouse />} />
