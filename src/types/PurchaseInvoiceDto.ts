@@ -20,5 +20,6 @@ export interface PurchaseInvoiceDto {
   status: number; // 1: Draft, 2: Posted, 3: Cancelled
   remarks?: string;
   createdAt?: string;
+  paidAmount?: number;
   items: PurchaseInvoiceItemDto[];
 }

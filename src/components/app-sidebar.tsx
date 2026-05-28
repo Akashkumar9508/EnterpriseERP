@@ -34,16 +34,39 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { useState, useEffect } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { BrandLogo } from "./ui/brand-logo"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { logout } from "@/store/slices/authSlice"
+import axiosClient from "@/Services/axiosClient"
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { sidebar, user } = useAppSelector((state) => state.auth);
+  const [companyPackage, setCompanyPackage] = useState<string>('Silver');
+
+  useEffect(() => {
+    const fetchCompanyPackage = async () => {
+      if (!user?.companyId) return;
+      try {
+        const response: any = await axiosClient.get('/Company');
+        if (response?.success) {
+          const companies = response.data || [];
+          const currentCompany = companies.find((c: any) => c.id === user.companyId);
+          if (currentCompany) {
+            setCompanyPackage(currentCompany.packageName || 'Silver');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch company package in sidebar', error);
+      }
+    };
+
+    fetchCompanyPackage();
+  }, [user?.companyId]);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -62,6 +85,27 @@ export function AppSidebar() {
     return IconComponent;
   };
 
+  const isSilver = companyPackage.toLowerCase() === 'silver';
+  const filteredSidebar = sidebar.map(item => {
+    const filteredChildren = item.children ? item.children.filter(child => {
+      const nameLower = child.name.toLowerCase();
+      const routeLower = (child.route || '').toLowerCase();
+      if (isSilver && (nameLower === 'stock transfer' || routeLower.includes('stocktransfer') || routeLower.includes('stock-transfer'))) {
+        return false;
+      }
+      return true;
+    }) : [];
+
+    return { ...item, children: filteredChildren };
+  }).filter(item => {
+    const nameLower = item.name.toLowerCase();
+    const routeLower = (item.route || '').toLowerCase();
+    if (isSilver && (nameLower === 'stock transfer' || routeLower.includes('stocktransfer') || routeLower.includes('stock-transfer'))) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <Sidebar collapsible="icon" className="bg-zinc-50 border-r border-zinc-200 dark:bg-zinc-950 dark:border-white/10 transition-colors duration-300">
       <SidebarContent>
@@ -72,7 +116,7 @@ export function AppSidebar() {
           <SidebarGroupLabel className="text-zinc-500 font-semibold tracking-widest text-[10px] uppercase mb-1">Menus</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {[...sidebar].sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
+              {[...filteredSidebar].sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
                 // If the item doesn't have a specific route but has children, it's a collapsible
                 const hasSubmenu = item.children && item.children.length > 0;
                 // For active state, we can check if current path starts with item route (if not null) or if any child is active

@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/pagination';
 import axiosClient from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
 import type { ProductDto } from '@/types/ProductDto';
@@ -164,12 +165,20 @@ function SearchableProductDropdown({
 }
 
 export default function ManageStockAdjustment() {
-  const { canView, canCreate, canDelete } = usePermissions('/product');
+  const { canView, canCreate, canDelete } = usePermissions('/stock-adjustment');
+  const user = useAppSelector((state) => state.auth.user);
 
   // Core Data States
   const [adjustments, setAdjustments] = useState<StockAdjustmentDto[]>([]);
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
+
+  const filteredWarehouses = useMemo(() => {
+    if (user?.warehouseId) {
+      return warehouses.filter(w => w.id === user.warehouseId);
+    }
+    return warehouses;
+  }, [warehouses, user?.warehouseId]);
   
   // Loading States
   const [isLoading, setIsLoading] = useState(false);
@@ -177,7 +186,7 @@ export default function ManageStockAdjustment() {
 
   // Filter States
   const [search, setSearch] = useState('');
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState('all');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(user?.warehouseId || 'all');
 
   // Pagination States
   const [pageNumber, setPageNumber] = useState(1);
@@ -276,7 +285,7 @@ export default function ManageStockAdjustment() {
   const openCreateDialog = () => {
     reset({
       productId: '',
-      warehouseId: warehouses[0]?.id || '',
+      warehouseId: user?.warehouseId || warehouses[0]?.id || '',
       quantity: 1,
       adjustmentType: 'Addition',
       adjustmentDate: new Date().toISOString().split('T')[0],
@@ -367,11 +376,11 @@ export default function ManageStockAdjustment() {
               onValueChange={setSelectedWarehouseId}
             >
               <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder="All Warehouses" />
+                <SelectValue placeholder={user?.warehouseId ? (user.warehouseName || "Warehouse") : "All Warehouses"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Warehouses</SelectItem>
-                {warehouses.map((w) => (
+                {!user?.warehouseId && <SelectItem value="all">All Warehouses</SelectItem>}
+                {filteredWarehouses.map((w) => (
                   <SelectItem key={w.id} value={w.id || ''}>
                     {w.name}
                   </SelectItem>
@@ -574,7 +583,7 @@ export default function ManageStockAdjustment() {
                   {...register('warehouseId', { required: true })}
                   className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-zinc-900 text-sm focus:outline-hidden focus:ring-1 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
                 >
-                  {warehouses.map((w) => (
+                  {filteredWarehouses.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name}
                     </option>

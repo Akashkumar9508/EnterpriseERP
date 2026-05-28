@@ -56,7 +56,7 @@ interface SelectedProduct {
 
 export default function GenerateBarcode() {
   const navigate = useNavigate();
-  const { canView } = usePermissions('/product');
+  const { canView } = usePermissions('/generate-barcode');
   const user = useAppSelector((state) => state.auth.user);
 
   // Data states

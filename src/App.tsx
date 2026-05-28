@@ -20,6 +20,7 @@ import ManageProduct from '@/pages/ManageProduct';
 import GenerateBarcode from '@/pages/GenerateBarcode';
 import ProductAttributes from '@/pages/ProductAttributes';
 import ManageStockAdjustment from '@/pages/ManageStockAdjustment';
+import ManageStockTransfer from '@/pages/ManageStockTransfer';
 import InventoryStatus from '@/pages/InventoryStatus';
 import ManagePurchaseInvoice from '@/pages/ManagePurchaseInvoice';
 import CreatePurchaseInvoice from '@/pages/CreatePurchaseInvoice';
@@ -29,6 +30,9 @@ import ManageWarehouse from '@/pages/ManageWarehouse';
 import ManageHSNCode from '@/pages/ManageHSNCode';
 import ManageCustomer from '@/pages/ManageCustomer';
 import ManageSupplier from '@/pages/ManageSupplier';
+import PurchaseReports from '@/pages/PurchaseReports';
+import ManagePurchaseReturn from '@/pages/ManagePurchaseReturn';
+import CreatePurchaseReturn from '@/pages/CreatePurchaseReturn';
 import Layout from '@/components/layout';
 import { useAppSelector } from '@/store/hooks';
 import { Toaster } from '@/components/ui/sonner';
@@ -70,9 +74,15 @@ export function App() {
                 <Route path="generate-barcode" element={<GenerateBarcode />} />
                 <Route path="product-attributes" element={<ProductAttributes />} />
                 <Route path="stock-adjustment" element={<ManageStockAdjustment />} />
+                <Route path="stock-transfer" element={<ManageStockTransfer />} />
+                <Route path="stocktransfer" element={<ManageStockTransfer />} />
                 <Route path="inventory-status" element={<InventoryStatus />} />
                 <Route path="purchase-invoice" element={<ManagePurchaseInvoice />} />
                 <Route path="purchase-invoice/create" element={<CreatePurchaseInvoice />} />
+                <Route path="purchase-invoice/edit/:id" element={<CreatePurchaseInvoice />} />
+                <Route path="purchase-return" element={<ManagePurchaseReturn />} />
+                <Route path="purchase-return/create" element={<CreatePurchaseReturn />} />
+                <Route path="purchase-reports" element={<PurchaseReports />} />
                 <Route path="brand" element={<ManageBrand />} />
                 <Route path="manufacturer" element={<ManageManufacturer />} />
                 <Route path="warehouse" element={<ManageWarehouse />} />

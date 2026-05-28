@@ -9,4 +9,6 @@ export interface CompanyDto {
   currencyCode?: string;
   financialYearStart?: string;
   address?: string;
+  packageId?: string;
+  packageName?: string;
 }
