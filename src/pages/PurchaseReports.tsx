@@ -6,7 +6,6 @@ import {
   Calendar, 
   Warehouse as WarehouseIcon, 
   User as UserIcon,
-  Download, 
   Printer, 
   FileSpreadsheet, 
   FileText, 
@@ -21,7 +20,6 @@ import {
   Coins
 } from 'lucide-react';
 import { Page } from '@/components/ui/page';
-import { Section } from '@/components/ui/section';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -636,7 +634,6 @@ export default function PurchaseReports() {
 
   const chartPaymentStatusData = useMemo(() => {
     if (!summaryReport) return [];
-    const totals = summaryReport.supplierWiseTotals;
     const totalAmount = summaryReport.totalAmount;
     const outstanding = summaryReport.pendingPayments;
     const paid = totalAmount - outstanding;
@@ -949,7 +946,7 @@ export default function PurchaseReports() {
                                 paddingAngle={3}
                                 dataKey="value"
                               >
-                                {chartPaymentStatusData.map((entry, index) => (
+                                {chartPaymentStatusData.map((_entry, index) => (
                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                               </Pie>
@@ -1252,7 +1249,7 @@ export default function PurchaseReports() {
                       </TableHeader>
                       <TableBody>
                         {filteredInvoices.length > 0 ? (
-                          filteredInvoices.map((i, idx) => {
+                          filteredInvoices.map((i) => {
                             const isExpanded = expandedInvoiceIds[i.id];
                             return (
                               <>

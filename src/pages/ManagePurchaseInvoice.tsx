@@ -20,9 +20,11 @@ import {
   User,
   Hash,
   StickyNote,
-  TrendingDown,
+  ArrowLeftRight,
   Receipt,
-  Ban
+  Ban,
+  Wallet,
+  TrendingDown
 } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -90,6 +92,13 @@ export default function ManagePurchaseInvoice() {
   // View Invoice Modal State
   const [viewingInvoice, setViewingInvoice] = useState<PurchaseInvoiceDto | null>(null);
   const [isLoadingView, setIsLoadingView] = useState(false);
+
+  // Payment Modal State
+  const [payingInvoice, setPayingInvoice] = useState<PurchaseInvoiceDto | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
+  const [paymentRemarks, setPaymentRemarks] = useState<string>('');
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
   const fetchInvoices = async () => {
     setIsLoading(true);
@@ -244,6 +253,58 @@ export default function ManagePurchaseInvoice() {
       toast.error('Failed to load invoice details.');
     } finally {
       setIsLoadingView(false);
+    }
+  };
+
+  const handleOpenPayment = (invoice: PurchaseInvoiceDto) => {
+    const net = invoice.netAmount || 0;
+    const paid = invoice.paidAmount || 0;
+    const due = Math.max(0, net - paid);
+    
+    setPayingInvoice(invoice);
+    setPaymentAmount(due.toFixed(2));
+    setPaymentMethod('Cash');
+    setPaymentRemarks('');
+  };
+
+  const handleRecordPayment = async () => {
+    if (!payingInvoice || !payingInvoice.id) return;
+    
+    const amount = parseFloat(paymentAmount) || 0;
+    const net = payingInvoice.netAmount || 0;
+    const paid = payingInvoice.paidAmount || 0;
+    const due = Math.max(0, net - paid);
+    
+    if (amount <= 0) {
+      toast.warning('Payment amount must be greater than zero.');
+      return;
+    }
+    
+    if (amount > due + 0.01) {
+      toast.warning(`Payment amount cannot exceed the remaining due amount of ₹${due.toFixed(2)}.`);
+      return;
+    }
+    
+    setIsSubmittingPayment(true);
+    try {
+      const response: any = await axiosClient.post(`/PurchaseInvoice/${payingInvoice.id}/pay`, {
+        amount: amount,
+        paymentMethod: paymentMethod,
+        remarks: paymentRemarks
+      });
+      
+      if (response?.success) {
+        toast.success(response.message || 'Payment recorded successfully!');
+        setPayingInvoice(null);
+        fetchInvoices();
+      } else {
+        toast.error(response?.message || 'Failed to record payment.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || err?.message || 'An error occurred while saving the payment.');
+    } finally {
+      setIsSubmittingPayment(false);
     }
   };
 
@@ -433,12 +494,14 @@ export default function ManagePurchaseInvoice() {
               <TableRow>
                 <TableHead className="w-[60px]">Sr.</TableHead>
                 <TableHead className="w-[120px]">Invoice Date</TableHead>
-                <TableHead className="w-[160px]">Invoice No.</TableHead>
-                <TableHead className="w-[200px]">Supplier</TableHead>
-                <TableHead className="w-[160px]">Warehouse</TableHead>
+                <TableHead className="w-[150px]">Invoice No.</TableHead>
+                <TableHead className="w-[180px]">Supplier</TableHead>
+                <TableHead className="w-[150px]">Warehouse</TableHead>
                 <TableHead className="w-[100px] text-center">Status</TableHead>
-                <TableHead className="w-[130px] text-right font-semibold text-zinc-900 dark:text-zinc-50">Net Amount</TableHead>
-                <TableHead className="text-center w-[160px]">Actions</TableHead>
+                <TableHead className="w-[120px] text-right font-semibold">Net Amount</TableHead>
+                <TableHead className="w-[120px] text-right font-semibold text-emerald-600">Paid</TableHead>
+                <TableHead className="w-[120px] text-right font-semibold text-red-650">Due</TableHead>
+                <TableHead className="text-center w-[180px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -481,6 +544,12 @@ export default function ManagePurchaseInvoice() {
                     <TableCell className="text-right font-mono text-sm font-bold">
                       ₹{inv.netAmount.toFixed(2)}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-sm text-emerald-600 font-semibold">
+                      ₹{(inv.paidAmount || 0).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm text-red-650 font-bold">
+                      ₹{Math.max(0, inv.netAmount - (inv.paidAmount || 0)).toFixed(2)}
+                    </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1">
                         {/* View button — always visible */}
@@ -493,6 +562,19 @@ export default function ManagePurchaseInvoice() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+
+                        {/* Record Payment — only for Posted and not fully paid */}
+                        {inv.status === 2 && (inv.paidAmount || 0) < inv.netAmount && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/20 dark:hover:text-emerald-400"
+                            onClick={() => handleOpenPayment(inv)}
+                            title="Record Payment"
+                          >
+                            <Wallet className="h-4.5 w-4.5" />
+                          </Button>
+                        )}
 
                         {/* Edit — only for Drafts */}
                         {inv.status === 1 && (
@@ -851,6 +933,134 @@ export default function ManagePurchaseInvoice() {
               </div>
             )}
 
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ─── Record Payment Modal (custom overlay) ─── */}
+      {payingInvoice !== null && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setPayingInvoice(null); }}
+        >
+          <div
+            className="relative bg-popover text-popover-foreground rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-border"
+            style={{ width: 'min(92vw, 500px)' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 dark:bg-emerald-950/30 rounded-lg text-emerald-600">
+                  <Wallet className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight text-foreground">Record Payment</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Invoice: {payingInvoice.invoiceNo}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPayingInvoice(null)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Summary details */}
+              <div className="grid grid-cols-2 gap-3 bg-muted/20 p-4 rounded-xl border border-border/60 text-sm font-medium">
+                <div>
+                  <div className="text-xs text-muted-foreground">Supplier</div>
+                  <div className="font-semibold text-foreground truncate">{payingInvoice.supplierName}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Warehouse</div>
+                  <div className="font-semibold text-foreground truncate">{payingInvoice.warehouseName}</div>
+                </div>
+                <div className="border-t border-border/40 pt-2 col-span-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Total Amount</span>
+                    <span>Paid</span>
+                    <span className="text-red-550">Remaining Due</span>
+                  </div>
+                  <div className="flex justify-between font-mono font-bold mt-0.5">
+                    <span className="text-zinc-650 font-semibold">₹{payingInvoice.netAmount.toFixed(2)}</span>
+                    <span className="text-emerald-650 font-semibold">₹{(payingInvoice.paidAmount || 0).toFixed(2)}</span>
+                    <span className="text-red-650 font-bold">₹{Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0)).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Amount to pay */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-zinc-500">Payment Amount (₹)</label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  max={Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0))}
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="h-10 font-mono font-bold text-lg text-emerald-600 focus-visible:ring-emerald-500"
+                  placeholder="0.00"
+                />
+              </div>
+
+              {/* Payment Method */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-zinc-500">Payment Method</label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className="w-full h-10">
+                    <SelectValue placeholder="Select Payment Mode" />
+                  </SelectTrigger>
+                  <SelectContent side="top">
+                    {['Cash', 'Bank Transfer', 'UPI', 'Credit Card'].map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {mode}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Remarks */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-zinc-500">Remarks / References</label>
+                <textarea
+                  value={paymentRemarks}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPaymentRemarks(e.target.value)}
+                  placeholder="E.g. Transaction ID, Cheque No, cash voucher details"
+                  className="flex min-h-[70px] w-full rounded-md border border-input bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-border bg-muted/10 flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setPayingInvoice(null)}
+                disabled={isSubmittingPayment}
+                className="h-9 px-4 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRecordPayment}
+                disabled={isSubmittingPayment}
+                className="h-9 px-4 text-xs bg-emerald-650 hover:bg-emerald-700 text-white gap-1.5 shadow-sm font-semibold"
+              >
+                {isSubmittingPayment ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wallet className="h-4 w-4" />
+                )}
+                Save Payment
+              </Button>
+            </div>
           </div>
         </div>,
         document.body
