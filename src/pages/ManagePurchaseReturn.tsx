@@ -64,6 +64,7 @@ interface PurchaseReturnItemDto {
   taxPercent: number;
   taxAmount: number;
   totalAmount: number;
+  unitName?: string;
 }
 
 interface PurchaseReturnDto {
@@ -664,7 +665,9 @@ export default function ManagePurchaseReturn() {
                                 <td className="px-4 py-3.5 font-mono text-sm text-muted-foreground">
                                   {item.batchNumber || <span className="italic text-muted-foreground/50">—</span>}
                                 </td>
-                                <td className="px-4 py-3.5 text-right font-mono font-bold text-red-650 dark:text-red-400">{item.quantity}</td>
+                                <td className="px-4 py-3.5 text-right font-mono font-bold text-red-650 dark:text-red-400 whitespace-nowrap">
+                                  {item.quantity} <span className="text-[10px] text-muted-foreground font-sans font-medium">{item.unitName}</span>
+                                </td>
                                 <td className="px-4 py-3.5 text-right font-mono text-foreground">₹{Number(item.purchaseRate).toFixed(2)}</td>
                                 <td className="px-4 py-3.5 text-right font-mono text-blue-600 dark:text-blue-400">{Number(item.taxPercent || 0).toFixed(1)}%</td>
                                 <td className="px-4 py-3.5 text-right font-mono font-bold text-foreground">₹{Number(item.totalAmount || 0).toFixed(2)}</td>

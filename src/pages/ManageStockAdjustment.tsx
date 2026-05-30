@@ -445,7 +445,10 @@ export default function ManageStockAdjustment() {
                       </TableCell>
                       <TableCell>
                         <div className="font-semibold text-sm">{prod?.name || 'Unknown Product'}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">{prod?.productCode}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2 items-center">
+                          <span>Code: {prod?.productCode}</span>
+                          {prod?.unitName && <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-sm text-zinc-650 dark:text-zinc-400 font-medium font-sans">Unit: {prod.unitName}</span>}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs">
                         <div className="flex items-center gap-1 text-zinc-700 dark:text-zinc-355">
@@ -470,8 +473,8 @@ export default function ManageStockAdjustment() {
                           )}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm font-bold">
-                        {isAddition ? '+' : '-'}{adj.quantity?.toFixed(2)}
+                      <TableCell className="text-right font-mono text-sm font-bold whitespace-nowrap">
+                        {isAddition ? '+' : '-'}{adj.quantity?.toFixed(2)} <span className="text-[10px] text-zinc-400 font-sans font-medium">{prod?.unitName}</span>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground leading-relaxed max-w-[200px] truncate" title={adj.remarks}>
                         <div className="flex items-start gap-1">
@@ -605,13 +608,19 @@ export default function ManageStockAdjustment() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                label="Quantity"
-                type="number"
-                step="0.001"
-                placeholder="1.000"
-                {...register('quantity', { required: 'Quantity is required', min: { value: 0.001, message: 'Quantity must be positive' } })}
-              />
+              {(() => {
+                const watchProductId = watch('productId');
+                const selectedProduct = products.find(p => p.id === watchProductId);
+                return (
+                  <FormField
+                    label={selectedProduct?.unitName ? `Quantity (${selectedProduct.unitName})` : "Quantity"}
+                    type="number"
+                    step="0.001"
+                    placeholder="1.000"
+                    {...register('quantity', { required: 'Quantity is required', min: { value: 0.001, message: 'Quantity must be positive' } })}
+                  />
+                );
+              })()}
               <FormField
                 label="Adjustment Date"
                 type="date"

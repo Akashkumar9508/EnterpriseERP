@@ -21,5 +21,13 @@ export interface PurchaseInvoiceDto {
   remarks?: string;
   createdAt?: string;
   paidAmount?: number;
+  paymentMode?: number;
+  paymentDetails?: PaymentDetailDto[];
   items: PurchaseInvoiceItemDto[];
+}
+
+export interface PaymentDetailDto {
+  paidAmount: number;
+  paymentMode: number;
+  createdAt?: string;
 }

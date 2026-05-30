@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   Plus, 
@@ -76,6 +76,8 @@ interface PreviewItem {
   productVariantId: string;
   batchSearch: string;
   productBatchId: string;
+  batchNumber?: string;
+  expiryDate?: string;
   quantity: number;
   freeQuantity: number;
   purchaseRate: number;
@@ -95,11 +97,15 @@ interface PreviewItem {
     variant?: string;
     batch?: string;
     duplicate?: string;
+    expiryDate?: string;
   };
 }
 
-
-
+interface PaymentDetailItem {
+  id: string;
+  paidAmount: number;
+  paymentMode: number;
+}
 
 export default function CreatePurchaseInvoice() {
   const navigate = useNavigate();
@@ -130,6 +136,9 @@ export default function CreatePurchaseInvoice() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [remarks, setRemarks] = useState('');
   const [flatDiscountAmount, setFlatDiscountAmount] = useState(0);
+  const [upfrontPayments, setUpfrontPayments] = useState<PaymentDetailItem[]>([]);
+  const [currentPaidAmount, setCurrentPaidAmount] = useState<number>(0);
+  const [currentPaymentMode, setCurrentPaymentMode] = useState<number>(1);
 
   // invoice details items state
   const [items, setItems] = useState<PurchaseInvoiceItemDto[]>([]);
@@ -144,6 +153,64 @@ export default function CreatePurchaseInvoice() {
   const [previewHeader, setPreviewHeader] = useState<PreviewHeader | null>(null);
   const [previewItems, setPreviewItems] = useState<PreviewItem[]>([]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewUpfrontPayments, setPreviewUpfrontPayments] = useState<PaymentDetailItem[]>([]);
+  const [previewCurrentPaidAmount, setPreviewCurrentPaidAmount] = useState<number>(0);
+  const [previewCurrentPaymentMode, setPreviewCurrentPaymentMode] = useState<number>(1);
+
+  // Excel import preview summary
+  const previewSummary = useMemo(() => {
+    let subTotal = 0;
+    let lineDiscountsSum = 0;
+    let totalTax = 0;
+
+    previewItems.forEach((item) => {
+      const qty = Number(item.quantity) || 0;
+      const rate = Number(item.purchaseRate) || 0;
+      const discPct = Number(item.discountPercent) || 0;
+      const taxPct = Number(item.taxPercent) || 0;
+
+      const amount = qty * rate;
+      const discountAmount = Number((amount * (discPct / 100)).toFixed(2));
+      const taxableAmount = amount - discountAmount;
+      const taxAmount = Number((taxableAmount * (taxPct / 100)).toFixed(2));
+
+      subTotal += amount;
+      lineDiscountsSum += discountAmount;
+      totalTax += taxAmount;
+    });
+
+    const netAmount = Number((subTotal - lineDiscountsSum + totalTax).toFixed(2));
+    return {
+      subTotal,
+      discountAmount: lineDiscountsSum,
+      taxAmount: totalTax,
+      netAmount,
+    };
+  }, [previewItems]);
+
+  const previewTotalPaidUpfront = useMemo(() => {
+    return previewUpfrontPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+  }, [previewUpfrontPayments]);
+
+  const previewRemainingPayable = useMemo(() => {
+    return Number((previewSummary.netAmount - previewTotalPaidUpfront).toFixed(2));
+  }, [previewSummary.netAmount, previewTotalPaidUpfront]);
+
+  const previewTotalPaidAmount = useMemo(() => {
+    if (previewUpfrontPayments.length > 0) {
+      return previewTotalPaidUpfront;
+    }
+    return previewCurrentPaidAmount;
+  }, [previewUpfrontPayments, previewTotalPaidUpfront, previewCurrentPaidAmount]);
+
+  const previewBalanceDue = useMemo(() => {
+    return Number((previewSummary.netAmount - previewTotalPaidAmount).toFixed(2));
+  }, [previewSummary.netAmount, previewTotalPaidAmount]);
+
+  // Keep previewCurrentPaidAmount in sync with previewRemainingPayable
+  useEffect(() => {
+    setPreviewCurrentPaidAmount(previewRemainingPayable > 0 ? previewRemainingPayable : 0);
+  }, [previewRemainingPayable]);
 
   const dialogFilteredProducts = useMemo(() => {
     if (!dialogSearch.trim()) return products;
@@ -226,12 +293,25 @@ export default function CreatePurchaseInvoice() {
           setReferenceNo(inv.referenceNo || '');
           setInvoiceDate(inv.invoiceDate ? new Date(inv.invoiceDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
           setRemarks(inv.remarks || '');
+          const dbPaidAmount = inv.paidAmount || 0;
+          const dbPaymentMode = inv.paymentMode || 1;
+          if (dbPaidAmount > 0) {
+            setUpfrontPayments([
+              {
+                id: `loaded-${Date.now()}`,
+                paidAmount: dbPaidAmount,
+                paymentMode: dbPaymentMode
+              }
+            ]);
+          }
           if (inv.items && inv.items.length > 0) {
             setItems(inv.items.map((item: any) => ({
               id: item.id,
               productId: item.productId || '',
               productVariantId: item.productVariantId || '',
               productBatchId: item.productBatchId || '',
+              batchNumber: item.batchNumber || '',
+              expiryDate: item.expiryDate ? item.expiryDate.split('T')[0] : '',
               quantity: item.quantity || 1,
               freeQuantity: item.freeQuantity || 0,
               purchaseRate: item.purchaseRate || 0,
@@ -279,7 +359,9 @@ export default function CreatePurchaseInvoice() {
         discountAmount: 0,
         taxPercent: 0,
         taxAmount: 0,
-        totalAmount: 0
+        totalAmount: 0,
+        batchNumber: '',
+        expiryDate: ''
       }
     ]);
   };
@@ -309,6 +391,8 @@ export default function CreatePurchaseInvoice() {
       productId: prodId,
       productVariantId: '', // reset variant
       productBatchId: '',   // reset batch
+      batchNumber: '',      // reset batch number
+      expiryDate: '',       // reset expiry date
       purchaseRate: product.purchaseRate || 0,
       salesRate: product.salesRate || 0,
       mrp: product.mrp || 0,
@@ -411,6 +495,30 @@ export default function CreatePurchaseInvoice() {
     };
   }, [items, flatDiscountAmount]);
 
+  const totalPaidUpfront = useMemo(() => {
+    return upfrontPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+  }, [upfrontPayments]);
+
+  const remainingPayable = useMemo(() => {
+    return Number((summaries.netAmount - totalPaidUpfront).toFixed(2));
+  }, [summaries.netAmount, totalPaidUpfront]);
+
+  const totalPaidAmount = useMemo(() => {
+    if (upfrontPayments.length > 0) {
+      return totalPaidUpfront;
+    }
+    return currentPaidAmount;
+  }, [upfrontPayments, totalPaidUpfront, currentPaidAmount]);
+
+  const balanceDue = useMemo(() => {
+    return Number((summaries.netAmount - totalPaidAmount).toFixed(2));
+  }, [summaries.netAmount, totalPaidAmount]);
+
+  // Keep currentPaidAmount in sync with remainingPayable
+  useEffect(() => {
+    setCurrentPaidAmount(remainingPayable > 0 ? remainingPayable : 0);
+  }, [remainingPayable]);
+
   // submit handler
   const handleSave = async (status: number) => {
     if (!supplierId) {
@@ -436,6 +544,23 @@ export default function CreatePurchaseInvoice() {
       return;
     }
 
+    const finalPayments = upfrontPayments.length > 0 
+      ? upfrontPayments 
+      : (currentPaidAmount > 0 
+          ? [{ id: 'default', paidAmount: currentPaidAmount, paymentMode: currentPaymentMode }] 
+          : []);
+
+    const finalPaidAmount = finalPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+
+    if (finalPaidAmount < 0) {
+      toast.error('Paid amount cannot be negative.');
+      return;
+    }
+    if (finalPaidAmount > summaries.netAmount) {
+      toast.error('Paid amount cannot exceed the net invoice amount.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payload: PurchaseInvoiceDto = {
@@ -451,11 +576,19 @@ export default function CreatePurchaseInvoice() {
         discountAmount: summaries.totalDiscount,
         taxAmount: summaries.totalTax,
         netAmount: summaries.netAmount,
+        paidAmount: finalPaidAmount,
+        paymentMode: finalPayments.length > 0 ? finalPayments[0].paymentMode : undefined,
+        paymentDetails: finalPayments.map(p => ({
+          paidAmount: p.paidAmount,
+          paymentMode: p.paymentMode
+        })),
         status, // 1 = Draft, 2 = Posted
         items: items.map(i => ({
           productId: i.productId,
           productVariantId: i.productVariantId || null as any,
           productBatchId: i.productBatchId || null as any,
+          batchNumber: i.batchNumber || null as any,
+          expiryDate: i.expiryDate ? new Date(i.expiryDate).toISOString() : null as any,
           quantity: Number(i.quantity),
           freeQuantity: Number(i.freeQuantity) || 0,
           purchaseRate: Number(i.purchaseRate),
@@ -773,9 +906,6 @@ export default function CreatePurchaseInvoice() {
           itemErrors.batch = 'Selected batch is invalid.';
           isAllValid = false;
         }
-      } else if (item.batchSearch) {
-        itemErrors.batch = `Batch "${item.batchSearch}" not found.`;
-        isAllValid = false;
       }
 
       if (item.quantity === undefined || item.quantity === null || isNaN(item.quantity)) {
@@ -936,6 +1066,9 @@ export default function CreatePurchaseInvoice() {
         }
       }
 
+      const expiryDateRaw = getRowValue(row, ['expiry', 'expire', 'exp date', 'expiry date', 'expiry_date', 'expire_date']);
+      const expiryDate = parseExcelDate(expiryDateRaw);
+
       return {
         id: `imported-${idx}-${Math.random()}`,
         productSearch,
@@ -946,6 +1079,8 @@ export default function CreatePurchaseInvoice() {
         productVariantId,
         batchSearch,
         productBatchId,
+        batchNumber: batchSearch,
+        expiryDate: expiryDate || '',
         quantity,
         freeQuantity,
         purchaseRate,
@@ -960,6 +1095,7 @@ export default function CreatePurchaseInvoice() {
     const validationResult = validatePreviewData(initialHeader, parsedItems);
     setPreviewHeader(validationResult.header);
     setPreviewItems(validationResult.items);
+    setPreviewUpfrontPayments([]);
     setIsPreviewOpen(true);
     toast.info('File parsed successfully! Please review items and errors.');
   };
@@ -1030,6 +1166,8 @@ export default function CreatePurchaseInvoice() {
       updatedItems[index].productBatchId = value;
       const batch = allBatches.find(b => b.id === value);
       if (batch) {
+        updatedItems[index].batchNumber = batch.batchNo || '';
+        updatedItems[index].expiryDate = batch.expiryDate ? batch.expiryDate.split('T')[0] : '';
         updatedItems[index].mrp = batch.mrp || updatedItems[index].mrp;
       }
     } else {
@@ -1037,6 +1175,17 @@ export default function CreatePurchaseInvoice() {
         ...updatedItems[index],
         [field]: value
       };
+      if (field === 'batchNumber') {
+        const typedBatchNo = String(value).trim();
+        const matched = allBatches.find(b => b.productId === updatedItems[index].productId && b.batchNo?.toLowerCase() === typedBatchNo.toLowerCase());
+        if (matched) {
+          updatedItems[index].productBatchId = matched.id;
+          updatedItems[index].expiryDate = matched.expiryDate ? matched.expiryDate.split('T')[0] : '';
+          updatedItems[index].mrp = matched.mrp || updatedItems[index].mrp;
+        } else {
+          updatedItems[index].productBatchId = '';
+        }
+      }
     }
 
     if (previewHeader) {
@@ -1057,6 +1206,8 @@ export default function CreatePurchaseInvoice() {
       productVariantId: '',
       batchSearch: '',
       productBatchId: '',
+      batchNumber: '',
+      expiryDate: '',
       quantity: 1,
       freeQuantity: 0,
       purchaseRate: 0,
@@ -1121,6 +1272,8 @@ export default function CreatePurchaseInvoice() {
           productId: item.productId,
           productVariantId: item.productVariantId || null as any,
           productBatchId: item.productBatchId || null as any,
+          batchNumber: item.batchNumber || null as any,
+          expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString() : null as any,
           quantity: qty,
           freeQuantity: Number(item.freeQuantity) || 0,
           purchaseRate: rate,
@@ -1136,6 +1289,23 @@ export default function CreatePurchaseInvoice() {
 
       const netAmount = Number((subTotal - lineDiscountsSum + totalTax).toFixed(2));
 
+      const finalPayments = previewUpfrontPayments.length > 0 
+        ? previewUpfrontPayments 
+        : (previewCurrentPaidAmount > 0 
+            ? [{ id: 'default', paidAmount: previewCurrentPaidAmount, paymentMode: previewCurrentPaymentMode }] 
+            : []);
+
+      const finalPaidAmount = finalPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+
+      if (finalPaidAmount < 0) {
+        toast.error('Paid amount cannot be negative.');
+        return;
+      }
+      if (finalPaidAmount > netAmount) {
+        toast.error('Paid amount cannot exceed the net invoice amount.');
+        return;
+      }
+
       const payload: PurchaseInvoiceDto = {
         companyId: user?.companyId || 'F6579BDB-C05B-4AF0-9404-7EBC3C15B0D8',
         branchId: user?.branchId || 'F6579BDB-C05B-4AF0-9404-7EBC3C15B0D8',
@@ -1149,6 +1319,12 @@ export default function CreatePurchaseInvoice() {
         discountAmount: Number(lineDiscountsSum.toFixed(2)),
         taxAmount: Number(totalTax.toFixed(2)),
         netAmount: netAmount,
+        paidAmount: finalPaidAmount,
+        paymentMode: finalPayments.length > 0 ? finalPayments[0].paymentMode : undefined,
+        paymentDetails: finalPayments.map(p => ({
+          paidAmount: p.paidAmount,
+          paymentMode: p.paymentMode
+        })),
         status,
         items: formattedItems
       };
@@ -1405,9 +1581,10 @@ export default function CreatePurchaseInvoice() {
                     <TableHead className="w-[40px] px-1 text-center">Sr.</TableHead>
                     <TableHead className="w-[200px] px-1.5">Product Selection</TableHead>
                     <TableHead className="w-[120px] px-1.5">Variant</TableHead>
-                    <TableHead className="w-[100px] px-1.5">Batch No.</TableHead>
-                    <TableHead className="w-[70px] px-1.5 text-right">Qty</TableHead>
-                    <TableHead className="w-[75px] px-1.5 text-right">Free Qty</TableHead>
+                    <TableHead className="w-[110px] px-1.5">Batch No.</TableHead>
+                    <TableHead className="w-[110px] px-1.5">Expiry Date</TableHead>
+                    <TableHead className="w-[110px] px-1.5 text-right">Qty</TableHead>
+                    <TableHead className="w-[115px] px-1.5 text-right">Free Qty</TableHead>
                     <TableHead className="w-[85px] px-1.5 text-right">Purchase Rate</TableHead>
                     <TableHead className="w-[85px] px-1.5 text-right">MRP</TableHead>
                     <TableHead className="w-[85px] px-1.5 text-right">Sales Rate</TableHead>
@@ -1420,7 +1597,7 @@ export default function CreatePurchaseInvoice() {
                 <TableBody>
                   {items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={13} className="py-8 text-center text-xs text-muted-foreground">
+                      <TableCell colSpan={14} className="py-8 text-center text-xs text-muted-foreground">
                         No items added yet. Click "Add Line Item" to start adding products.
                       </TableCell>
                     </TableRow>
@@ -1428,13 +1605,13 @@ export default function CreatePurchaseInvoice() {
                     items.map((item, index) => {
                       const prodVariants = getVariantsForProduct(item.productId);
                       const prodBatches = getBatchesForProduct(item.productId);
+                      const selectedProduct = products.find(p => p.id === item.productId);
                       
                       return (
                         <TableRow key={index} className="align-middle">
                           <TableCell className="font-mono text-[10px] py-2 px-1 text-center">{index + 1}</TableCell>
                           <TableCell className="py-2 px-1.5">
                             {(() => {
-                              const selectedProduct = products.find(p => p.id === item.productId);
                               return (
                                 <button
                                   type="button"
@@ -1444,7 +1621,9 @@ export default function CreatePurchaseInvoice() {
                                   {selectedProduct ? (
                                     <div className="truncate pr-1">
                                       <div className="font-medium truncate">{selectedProduct.name}</div>
-                                      <div className="text-[9px] text-zinc-400 font-mono leading-none truncate mt-0.5">{selectedProduct.productCode}</div>
+                                      <div className="text-[9px] text-zinc-400 font-mono leading-none truncate mt-0.5">
+                                        {selectedProduct.productCode} {selectedProduct.unitName ? `• Unit: ${selectedProduct.unitName}` : ''}
+                                      </div>
                                     </div>
                                   ) : (
                                     <span className="text-zinc-400 dark:text-zinc-500">Select Product...</span>
@@ -1470,41 +1649,82 @@ export default function CreatePurchaseInvoice() {
                             </select>
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
-                            <select
-                              value={item.productBatchId || ''}
-                              onChange={(e) => handleBatchChange(index, e.target.value)}
-                              disabled={!item.productId || prodBatches.length === 0}
-                              className="w-full h-8 px-1.5 rounded-md border border-zinc-200 bg-white text-zinc-900 text-xs focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                            >
-                              <option value="">No Batch</option>
+                            <input
+                              type="text"
+                              list={`batch-list-${index}`}
+                              placeholder="Batch No..."
+                              value={item.batchNumber || ''}
+                              onChange={(e) => {
+                                const batchNo = e.target.value;
+                                const updated = [...items];
+                                updated[index].batchNumber = batchNo;
+                                const matchedBatch = prodBatches.find(b => b.batchNo?.toLowerCase() === batchNo.toLowerCase());
+                                if (matchedBatch) {
+                                  updated[index].productBatchId = matchedBatch.id;
+                                  updated[index].expiryDate = matchedBatch.expiryDate ? matchedBatch.expiryDate.split('T')[0] : '';
+                                  updated[index].mrp = matchedBatch.mrp || updated[index].mrp;
+                                } else {
+                                  updated[index].productBatchId = undefined;
+                                }
+                                setItems(updated);
+                              }}
+                              disabled={!item.productId}
+                              className="w-full h-8 px-2 rounded-md border border-zinc-200 bg-white text-zinc-900 text-xs focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 disabled:opacity-50 font-mono"
+                            />
+                            <datalist id={`batch-list-${index}`}>
                               {prodBatches.map(b => (
-                                <option key={b.id} value={b.id}>
-                                  {b.batchNo}
-                                </option>
+                                <option key={b.id} value={b.batchNo} />
                               ))}
-                            </select>
+                            </datalist>
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
                             <Input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={item.quantity}
-                              onChange={(e) => handleNumericFieldChange(index, 'quantity', Number(e.target.value))}
+                              type="date"
+                              value={item.expiryDate ? item.expiryDate.split('T')[0] : ''}
+                              onChange={(e) => {
+                                const updated = [...items];
+                                updated[index].expiryDate = e.target.value;
+                                setItems(updated);
+                              }}
                               disabled={!item.productId}
-                              className="h-8 text-xs text-right font-mono px-1.5 py-1"
+                              className="h-8 text-xs px-1.5 py-1"
                             />
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={item.freeQuantity}
-                              onChange={(e) => handleNumericFieldChange(index, 'freeQuantity', Number(e.target.value))}
-                              disabled={!item.productId}
-                              className="h-8 text-xs text-right font-mono px-1.5 py-1"
-                            />
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={item.quantity}
+                                onChange={(e) => handleNumericFieldChange(index, 'quantity', Number(e.target.value))}
+                                disabled={!item.productId}
+                                className="h-8 text-xs text-right font-mono px-1.5 py-1 w-full"
+                              />
+                              {selectedProduct?.unitName && (
+                                <span className="text-[10px] text-zinc-550 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                  {selectedProduct.unitName}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-2 px-1.5">
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={item.freeQuantity}
+                                onChange={(e) => handleNumericFieldChange(index, 'freeQuantity', Number(e.target.value))}
+                                disabled={!item.productId}
+                                className="h-8 text-xs text-right font-mono px-1.5 py-1 w-full"
+                              />
+                              {selectedProduct?.unitName && (
+                                <span className="text-[10px] text-zinc-550 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                  {selectedProduct.unitName}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
                             <Input
@@ -1587,12 +1807,149 @@ export default function CreatePurchaseInvoice() {
 
           {/* Pricing Summary Layout */}
           <div className="flex flex-col md:flex-row gap-6 justify-between items-start">
-            <div className="w-full md:max-w-md bg-card border border-border p-4 rounded-xl shadow-2xs space-y-2">
-              <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Invoice Terms & Notes</h3>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Saving as a **Draft** stores the invoice details for future edits without affecting your inventory stock levels.
-                **Posting the Invoice** locks the values and immediately performs a stock-in transaction, increasing inventory status across the selected warehouse.
-              </p>
+            <div className="w-full md:flex-1 space-y-4">
+              {/* Payment Details Card */}
+              <div className="bg-card border border-border p-5 rounded-xl shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Payment Details</h3>
+                  {remainingPayable > 0 && (
+                    <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 px-2.5 py-1 rounded-full font-sans">
+                      Remaining: ₹{remainingPayable.toFixed(2)}
+                    </span>
+                  )}
+                  {remainingPayable === 0 && summaries.netAmount > 0 && (
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-450 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1 rounded-full font-sans">
+                      Fully Paid
+                    </span>
+                  )}
+                </div>
+
+                {remainingPayable > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end bg-muted/10 p-3 rounded-lg border border-border/50">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 block">
+                        Amount to Pay (₹)
+                      </label>
+                      <Input
+                        type="number"
+                        min="0.01"
+                        max={remainingPayable}
+                        step="0.01"
+                        value={currentPaidAmount || ''}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (val >= 0) {
+                            setCurrentPaidAmount(Math.min(val, remainingPayable));
+                          } else if (e.target.value === '') {
+                            setCurrentPaidAmount(0);
+                          }
+                        }}
+                        className="h-9 text-xs font-mono"
+                        placeholder="Enter amount..."
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 block">
+                        Payment Mode
+                      </label>
+                      <select
+                        value={currentPaymentMode}
+                        onChange={(e) => setCurrentPaymentMode(Number(e.target.value))}
+                        className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-zinc-900 text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 cursor-pointer"
+                      >
+                        <option value={1}>Cash</option>
+                        <option value={2}>Bank Transfer</option>
+                        <option value={3}>Card</option>
+                        <option value={4}>UPI</option>
+                        <option value={5}>Cheque</option>
+                      </select>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (currentPaidAmount <= 0) {
+                          toast.error("Please enter a valid paid amount.");
+                          return;
+                        }
+                        if (currentPaidAmount > remainingPayable) {
+                          toast.error("Paid amount cannot exceed the remaining due amount.");
+                          return;
+                        }
+                        const newPayment: PaymentDetailItem = {
+                          id: `pay-${Date.now()}-${Math.random()}`,
+                          paidAmount: currentPaidAmount,
+                          paymentMode: currentPaymentMode
+                        };
+                        setUpfrontPayments([...upfrontPayments, newPayment]);
+                      }}
+                      className="h-9 text-xs gap-1.5 w-full bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Payment
+                    </Button>
+                  </div>
+                )}
+
+                {/* Added Payments List */}
+                {upfrontPayments.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Added Splits</h4>
+                    <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+                      {upfrontPayments.map((p) => {
+                        const getModeLabel = (mode: number) => {
+                          switch (mode) {
+                            case 1: return "Cash";
+                            case 2: return "Bank Transfer";
+                            case 3: return "Card";
+                            case 4: return "UPI";
+                            case 5: return "Cheque";
+                            default: return "Unknown";
+                          }
+                        };
+                        return (
+                          <div key={p.id} className="flex items-center justify-between p-2 px-3 bg-card hover:bg-muted/10 transition-colors duration-150 text-xs font-mono">
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-zinc-950 dark:text-zinc-50">₹{p.paidAmount.toFixed(2)}</span>
+                              <span className="text-[10px] text-muted-foreground uppercase font-semibold font-sans bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded">
+                                {getModeLabel(p.paymentMode)}
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setUpfrontPayments(upfrontPayments.filter(item => item.id !== p.id));
+                              }}
+                              className="h-7 w-7 text-zinc-400 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {totalPaidAmount > 0 && (
+                  <div className="pt-3 border-t border-dashed border-border flex items-center justify-between text-xs font-semibold font-mono">
+                    <span className="text-zinc-500 font-sans">Total Paid:</span>
+                    <span className="text-zinc-950 dark:text-zinc-50">₹{totalPaidAmount.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Invoice Terms & Notes */}
+              <div className="bg-card border border-border p-4 rounded-xl shadow-2xs space-y-2">
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Invoice Terms & Notes</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Saving as a **Draft** stores the invoice details for future edits without affecting your inventory stock levels.
+                  **Posting the Invoice** locks the values and immediately performs a stock-in transaction, increasing inventory status across the selected warehouse.
+                </p>
+              </div>
             </div>
 
             <div className="w-full md:max-w-xs bg-card border border-border p-5 rounded-xl shadow-xs space-y-3 font-mono text-xs">
@@ -1624,6 +1981,19 @@ export default function CreatePurchaseInvoice() {
                 <span>Net Payable:</span>
                 <span className="text-green-600 dark:text-green-450">₹{summaries.netAmount.toFixed(2)}</span>
               </div>
+              {totalPaidAmount > 0 && (
+                <>
+                  <div className="flex justify-between text-zinc-550 dark:text-zinc-400 pt-1">
+                    <span>Total Paid:</span>
+                    <span className="font-semibold text-zinc-950 dark:text-zinc-50">₹{totalPaidAmount.toFixed(2)}</span>
+                  </div>
+                  <hr className="border-border border-dashed" />
+                  <div className="flex justify-between text-sm font-bold">
+                    <span>Balance Due:</span>
+                    <span className="text-red-500">₹{balanceDue.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1678,9 +2048,10 @@ export default function CreatePurchaseInvoice() {
                   >
                     <td className="p-2.5 pl-3">
                       <div className="font-semibold text-zinc-900 dark:text-zinc-50">{p.name}</div>
-                      <div className="flex gap-2 text-[10px] text-zinc-400 font-mono mt-0.5">
+                      <div className="flex gap-2 text-[10px] text-zinc-400 font-mono mt-0.5 items-center">
                         <span>Code: {p.productCode}</span>
                         {p.sku && <span>• SKU: {p.sku}</span>}
+                        {p.unitName && <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-600 dark:text-zinc-400 font-semibold font-sans">Unit: {p.unitName}</span>}
                       </div>
                     </td>
                     <td className="p-2.5 text-right font-mono text-zinc-700 dark:text-zinc-350">
@@ -1747,109 +2118,250 @@ export default function CreatePurchaseInvoice() {
 
           {previewHeader && (
             <div className="space-y-4 flex-1 overflow-y-auto min-h-0 pr-1">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-muted/20 p-4 rounded-xl border border-border">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-550 dark:text-zinc-400 uppercase tracking-wider block">
-                    Supplier {previewHeader.supplierSearch && `(${previewHeader.supplierSearch})`}
-                  </label>
-                  <select
-                    value={previewHeader.supplierId}
-                    onChange={(e) => handlePreviewHeaderChange('supplierId', e.target.value)}
-                    className={`w-full h-8.5 px-3 rounded-md border text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
-                      previewHeader.errors.supplier ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
-                    }`}
-                  >
-                    <option value="">Select Supplier...</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                  {previewHeader.errors.supplier && (
-                    <span className="text-[10px] text-red-500 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.supplier}
-                    </span>
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                {/* Left Card: Metadata Fields */}
+                <div className="lg:col-span-3 bg-muted/20 p-4 rounded-xl border border-border grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                      Supplier {previewHeader.supplierSearch && `(${previewHeader.supplierSearch})`}
+                    </label>
+                    <select
+                      value={previewHeader.supplierId}
+                      onChange={(e) => handlePreviewHeaderChange('supplierId', e.target.value)}
+                      className={`w-full h-8.5 px-3 rounded-md border text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
+                        previewHeader.errors.supplier ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                      }`}
+                    >
+                      <option value="">Select Supplier...</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                    {previewHeader.errors.supplier && (
+                      <span className="text-[10px] text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.supplier}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                      Warehouse {previewHeader.warehouseSearch && `(${previewHeader.warehouseSearch})`}
+                    </label>
+                    <select
+                      value={previewHeader.warehouseId}
+                      onChange={(e) => handlePreviewHeaderChange('warehouseId', e.target.value)}
+                      className={`w-full h-8.5 px-3 rounded-md border text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
+                        previewHeader.errors.warehouse ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
+                      }`}
+                    >
+                      <option value="">Select Warehouse...</option>
+                      {warehouses.map((w) => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                    </select>
+                    {previewHeader.errors.warehouse && (
+                      <span className="text-[10px] text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.warehouse}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                      Supplier Invoice No.
+                    </label>
+                    <Input
+                      type="text"
+                      value={previewHeader.invoiceNo}
+                      onChange={(e) => handlePreviewHeaderChange('invoiceNo', e.target.value)}
+                      className={`h-8.5 text-xs ${previewHeader.errors.invoiceNo ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                    />
+                    {previewHeader.errors.invoiceNo && (
+                      <span className="text-[10px] text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.invoiceNo}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                      Invoice Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={previewHeader.invoiceDate}
+                      onChange={(e) => handlePreviewHeaderChange('invoiceDate', e.target.value)}
+                      className={`h-8.5 text-xs ${previewHeader.errors.invoiceDate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                    />
+                    {previewHeader.errors.invoiceDate && (
+                      <span className="text-[10px] text-red-500 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.invoiceDate}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                      Reference / PO Number
+                    </label>
+                    <Input
+                      type="text"
+                      value={previewHeader.referenceNo}
+                      onChange={(e) => handlePreviewHeaderChange('referenceNo', e.target.value)}
+                      className="h-8.5 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
+                      Remarks
+                    </label>
+                    <Input
+                      type="text"
+                      value={previewHeader.remarks}
+                      onChange={(e) => handlePreviewHeaderChange('remarks', e.target.value)}
+                      className="h-8.5 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Right Card: Payment details in Excel Import Preview */}
+                <div className="lg:col-span-1 bg-card border border-border p-4 rounded-xl shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <h3 className="text-xs font-bold text-zinc-550 uppercase tracking-wider">Payment Details</h3>
+                    {previewRemainingPayable > 0 && (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-full font-sans">
+                        Due: ₹{previewRemainingPayable.toFixed(2)}
+                      </span>
+                    )}
+                    {previewRemainingPayable === 0 && previewSummary.netAmount > 0 && (
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-450 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full font-sans">
+                        Fully Paid
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Net Payable and Balance Due Side-by-Side */}
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-zinc-450 font-sans block">Net Payable</span>
+                      <span className="font-bold text-zinc-950 dark:text-zinc-50 block">₹{previewSummary.netAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-zinc-450 font-sans block">Balance Due</span>
+                      <span className={`font-bold block ${
+                        previewSummary.netAmount - previewTotalPaidAmount > 0 
+                          ? 'text-red-500' 
+                          : 'text-green-600 dark:text-green-450'
+                      }`}>
+                        ₹{(previewSummary.netAmount - previewTotalPaidAmount).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {previewRemainingPayable > 0 && (
+                    <div className="space-y-2 bg-muted/10 p-2.5 rounded-lg border border-border/50">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold text-zinc-555 dark:text-zinc-405 block">Amount (₹)</label>
+                          <Input
+                            type="number"
+                            min="0.01"
+                            max={previewRemainingPayable}
+                            step="0.01"
+                            value={previewCurrentPaidAmount || ''}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              if (val >= 0) {
+                                setPreviewCurrentPaidAmount(Math.min(val, previewRemainingPayable));
+                              } else if (e.target.value === '') {
+                                setPreviewCurrentPaidAmount(0);
+                              }
+                            }}
+                            className="h-8 text-xs font-mono px-2 py-1"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold text-zinc-555 dark:text-zinc-405 block">Mode</label>
+                          <select
+                            value={previewCurrentPaymentMode}
+                            onChange={(e) => setPreviewCurrentPaymentMode(Number(e.target.value))}
+                            className="w-full h-8 px-2 rounded-md border border-zinc-200 bg-white text-zinc-900 text-xs focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 cursor-pointer"
+                          >
+                            <option value={1}>Cash</option>
+                            <option value={2}>Bank Transfer</option>
+                            <option value={3}>Card</option>
+                            <option value={4}>UPI</option>
+                            <option value={5}>Cheque</option>
+                          </select>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          if (previewCurrentPaidAmount <= 0) {
+                            toast.error("Please enter a valid paid amount.");
+                            return;
+                          }
+                          if (previewCurrentPaidAmount > previewRemainingPayable) {
+                            toast.error("Paid amount cannot exceed the remaining due amount.");
+                            return;
+                          }
+                          const newPayment: PaymentDetailItem = {
+                            id: `pay-preview-${Date.now()}-${Math.random()}`,
+                            paidAmount: previewCurrentPaidAmount,
+                            paymentMode: previewCurrentPaymentMode
+                          };
+                          setPreviewUpfrontPayments([...previewUpfrontPayments, newPayment]);
+                        }}
+                        className="h-8 text-xs w-full bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:text-zinc-950 font-medium"
+                      >
+                        Add Payment
+                      </Button>
+                    </div>
                   )}
-                </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
-                    Warehouse {previewHeader.warehouseSearch && `(${previewHeader.warehouseSearch})`}
-                  </label>
-                  <select
-                    value={previewHeader.warehouseId}
-                    onChange={(e) => handlePreviewHeaderChange('warehouseId', e.target.value)}
-                    className={`w-full h-8.5 px-3 rounded-md border text-xs focus:outline-hidden focus:ring-1 focus:ring-zinc-900 bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 ${
-                      previewHeader.errors.warehouse ? 'border-red-500 focus:ring-red-500' : 'border-zinc-200 dark:border-zinc-800'
-                    }`}
-                  >
-                    <option value="">Select Warehouse...</option>
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>{w.name}</option>
-                    ))}
-                  </select>
-                  {previewHeader.errors.warehouse && (
-                    <span className="text-[10px] text-red-500 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.warehouse}
-                    </span>
+                  {/* Added splits inside preview */}
+                  {previewUpfrontPayments.length > 0 && (
+                    <div className="space-y-1.5 max-h-[100px] overflow-y-auto pr-1">
+                      <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+                        {previewUpfrontPayments.map((p) => {
+                          const getModeLabel = (mode: number) => {
+                            switch (mode) {
+                              case 1: return "Cash";
+                              case 2: return "Bank";
+                              case 3: return "Card";
+                              case 4: return "UPI";
+                              case 5: return "Cheque";
+                              default: return "Unknown";
+                            }
+                          };
+                          return (
+                            <div key={p.id} className="flex items-center justify-between p-1.5 px-2 bg-card hover:bg-muted/10 transition-colors duration-150 text-[10px] font-mono">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-zinc-950 dark:text-zinc-50">₹{p.paidAmount.toFixed(2)}</span>
+                                <span className="text-[9px] text-muted-foreground uppercase font-semibold font-sans bg-zinc-100 dark:bg-zinc-800 px-1 rounded">
+                                  {getModeLabel(p.paymentMode)}
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setPreviewUpfrontPayments(previewUpfrontPayments.filter(item => item.id !== p.id));
+                                }}
+                                className="h-5 w-5 text-zinc-400 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
-                    Supplier Invoice No.
-                  </label>
-                  <Input
-                    type="text"
-                    value={previewHeader.invoiceNo}
-                    onChange={(e) => handlePreviewHeaderChange('invoiceNo', e.target.value)}
-                    className={`h-8.5 text-xs ${previewHeader.errors.invoiceNo ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                  />
-                  {previewHeader.errors.invoiceNo && (
-                    <span className="text-[10px] text-red-500 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.invoiceNo}
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
-                    Invoice Date
-                  </label>
-                  <Input
-                    type="date"
-                    value={previewHeader.invoiceDate}
-                    onChange={(e) => handlePreviewHeaderChange('invoiceDate', e.target.value)}
-                    className={`h-8.5 text-xs ${previewHeader.errors.invoiceDate ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                  />
-                  {previewHeader.errors.invoiceDate && (
-                    <span className="text-[10px] text-red-500 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" /> {previewHeader.errors.invoiceDate}
-                    </span>
-                  )}
-                </div>
-
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
-                    Reference / PO Number
-                  </label>
-                  <Input
-                    type="text"
-                    value={previewHeader.referenceNo}
-                    onChange={(e) => handlePreviewHeaderChange('referenceNo', e.target.value)}
-                    className="h-8.5 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-xs font-semibold text-zinc-555 dark:text-zinc-400 uppercase tracking-wider block">
-                    Remarks
-                  </label>
-                  <Input
-                    type="text"
-                    value={previewHeader.remarks}
-                    onChange={(e) => handlePreviewHeaderChange('remarks', e.target.value)}
-                    className="h-8.5 text-xs"
-                  />
                 </div>
               </div>
 
@@ -1875,7 +2387,8 @@ export default function CreatePurchaseInvoice() {
                         <th className="w-[180px] p-2">Excel Input</th>
                         <th className="w-[200px] p-2">Product Match</th>
                         <th className="w-[110px] p-2">Variant</th>
-                        <th className="w-[100px] p-2">Batch</th>
+                        <th className="w-[110px] p-2">Batch</th>
+                        <th className="w-[110px] p-2">Expiry Date</th>
                         <th className="w-[70px] p-2 text-right">Qty</th>
                         <th className="w-[75px] p-2 text-right">Free Qty</th>
                         <th className="w-[85px] p-2 text-right">Rate</th>
@@ -1890,7 +2403,7 @@ export default function CreatePurchaseInvoice() {
                     <tbody className="divide-y divide-border">
                       {previewItems.length === 0 ? (
                         <tr>
-                          <td colSpan={14} className="py-8 text-center text-xs text-muted-foreground">
+                          <td colSpan={15} className="py-8 text-center text-xs text-muted-foreground">
                             No items to preview. Add a row to get started.
                           </td>
                         </tr>
@@ -1971,19 +2484,43 @@ export default function CreatePurchaseInvoice() {
                               </td>
 
                               <td className="p-2">
-                                <select
-                                  value={item.productBatchId}
-                                  onChange={(e) => handlePreviewItemChange(idx, 'productBatchId', e.target.value)}
-                                  disabled={!item.productId || itemBatches.length === 0}
-                                  className={`w-full h-8 px-1.5 rounded-md border text-xs focus:outline-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed ${
+                                <input
+                                  type="text"
+                                  list={`preview-batch-list-${idx}`}
+                                  placeholder="Batch No..."
+                                  value={item.batchNumber || ''}
+                                  onChange={(e) => {
+                                    const batchNo = e.target.value;
+                                    const matchedBatch = itemBatches.find(b => b.batchNo?.toLowerCase() === batchNo.toLowerCase());
+                                    if (matchedBatch) {
+                                      handlePreviewItemChange(idx, 'productBatchId', matchedBatch.id);
+                                      handlePreviewItemChange(idx, 'batchNumber', matchedBatch.batchNo);
+                                      handlePreviewItemChange(idx, 'expiryDate', matchedBatch.expiryDate ? matchedBatch.expiryDate.split('T')[0] : '');
+                                      handlePreviewItemChange(idx, 'mrp', matchedBatch.mrp || item.mrp);
+                                    } else {
+                                      handlePreviewItemChange(idx, 'productBatchId', '');
+                                      handlePreviewItemChange(idx, 'batchNumber', batchNo);
+                                    }
+                                  }}
+                                  disabled={!item.productId}
+                                  className={`w-full h-8 px-2 rounded-md border text-xs focus:outline-hidden bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50 disabled:opacity-40 font-mono ${
                                     item.errors.batch ? 'border-red-500' : 'border-zinc-200 dark:border-zinc-800'
                                   }`}
-                                >
-                                  <option value="">No Batch</option>
+                                />
+                                <datalist id={`preview-batch-list-${idx}`}>
                                   {itemBatches.map(b => (
-                                    <option key={b.id} value={b.id}>{b.batchNo}</option>
+                                    <option key={b.id} value={b.batchNo} />
                                   ))}
-                                </select>
+                                </datalist>
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  type="date"
+                                  value={item.expiryDate ? item.expiryDate.split('T')[0] : ''}
+                                  onChange={(e) => handlePreviewItemChange(idx, 'expiryDate', e.target.value)}
+                                  disabled={!item.productId}
+                                  className="h-8 text-xs px-1.5 py-1"
+                                />
                               </td>
 
                               <td className="p-2">

@@ -8,6 +8,7 @@ export interface PurchaseInvoiceItemDto {
   variantName?: string;
   productBatchId?: string;
   batchNumber?: string;
+  expiryDate?: string;
   quantity: number;
   freeQuantity?: number;
   purchaseRate: number;

@@ -7,4 +7,5 @@ export interface InventoryStatusDto {
   warehouseId: string;
   warehouseName: string;
   currentStock: number;
+  unitName?: string;
 }

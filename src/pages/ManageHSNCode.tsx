@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, Binary } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -40,12 +40,15 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import type { HSNCodeDto } from '@/types/HSNCodeDto';
+import type { TaxProfileDto } from '@/types/TaxProfileDto';
 
 export default function ManageHSNCode() {
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/hsncode');
 
   const [hsnCodes, setHsnCodes] = useState<HSNCodeDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [taxProfiles, setTaxProfiles] = useState<TaxProfileDto[]>([]);
+  const [isTaxProfileLoading, setIsTaxProfileLoading] = useState(false);
 
   // Pagination & Search state
   const [pageNumber, setPageNumber] = useState(1);
@@ -60,6 +63,7 @@ export default function ManageHSNCode() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<HSNCodeDto>();
 
@@ -78,9 +82,25 @@ export default function ManageHSNCode() {
     }
   };
 
+  const fetchTaxProfiles = async () => {
+    setIsTaxProfileLoading(true);
+    try {
+      const response: any = await axiosClient.get('/TaxProfile');
+      if (response?.success) {
+        setTaxProfiles(response.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tax profiles', error);
+      toast.error('Failed to load tax profiles.');
+    } finally {
+      setIsTaxProfileLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (canView) {
       fetchHsnCodes();
+      fetchTaxProfiles();
     }
   }, [canView]);
 
@@ -103,7 +123,7 @@ export default function ManageHSNCode() {
   }, [search, pageSize]);
 
   const openCreateDialog = () => {
-    reset({ code: '', description: '', gstPercentage: 0 });
+    reset({ code: '', description: '', taxProfileId: undefined });
     setEditingId(null);
     setIsDialogOpen(true);
   };
@@ -112,7 +132,7 @@ export default function ManageHSNCode() {
     reset({
       code: hsn.code,
       description: hsn.description || '',
-      gstPercentage: hsn.gstPercentage,
+      taxProfileId: hsn.taxProfileId || undefined,
     });
     setEditingId(hsn.id || null);
     setIsDialogOpen(true);
@@ -121,8 +141,9 @@ export default function ManageHSNCode() {
   const onSubmit = async (data: HSNCodeDto) => {
     try {
       const payload = {
-        ...data,
-        gstPercentage: Number(data.gstPercentage),
+        code: data.code,
+        description: data.description,
+        taxProfileId: data.taxProfileId || null,
       };
 
       let response: any;
@@ -203,7 +224,7 @@ export default function ManageHSNCode() {
               <TableRow>
                 <TableHead className="w-[80px]">Sr. No.</TableHead>
                 <TableHead className="w-[200px]">HSN Code</TableHead>
-                <TableHead className="w-[150px]">GST Percentage (%)</TableHead>
+                <TableHead className="w-[220px]">GST Slab</TableHead>
                 <TableHead>Description</TableHead>
                 {(canEdit || canDelete) && <TableHead className="text-right w-[120px]">Actions</TableHead>}
               </TableRow>
@@ -231,7 +252,13 @@ export default function ManageHSNCode() {
                       <Binary className="h-4 w-4 text-zinc-400" />
                       {hsn.code}
                     </TableCell>
-                    <TableCell className="font-semibold text-primary">{hsn.gstPercentage}%</TableCell>
+                    <TableCell className="font-semibold text-primary">
+                      {hsn.taxProfileName
+                        ? `${hsn.taxProfileName} (${hsn.gstPercentage}%)`
+                        : hsn.gstPercentage > 0
+                        ? `${hsn.gstPercentage}%`
+                        : <span className="text-muted-foreground text-sm">—</span>}
+                    </TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[300px]" title={hsn.description}>
                       {hsn.description || '-'}
                     </TableCell>
@@ -348,18 +375,40 @@ export default function ManageHSNCode() {
             />
             {errors.code && <span className="text-xs text-red-500">{errors.code.message}</span>}
 
-            <FormField
-              label="GST Percentage (%)"
-              type="number"
-              step="0.01"
-              placeholder="e.g. 18"
-              {...register('gstPercentage', { 
-                required: 'GST Percentage is required',
-                min: { value: 0, message: 'Percentage cannot be negative' },
-                max: { value: 100, message: 'Percentage cannot exceed 100' }
-              })}
-            />
-            {errors.gstPercentage && <span className="text-xs text-red-500">{errors.gstPercentage.message}</span>}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                GST Percentage (%)
+              </label>
+              <Controller
+                name="taxProfileId"
+                control={control}
+                rules={{ required: 'GST slab is required' }}
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? ''}
+                    onValueChange={(val) => field.onChange(val)}
+                    disabled={isTaxProfileLoading}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isTaxProfileLoading ? 'Loading...' : 'Select GST slab'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taxProfiles.map((tp) => {
+                        const total = (tp.cgst ?? 0) + (tp.sgst ?? 0) + (tp.cess ?? 0);
+                        return (
+                          <SelectItem key={tp.id} value={tp.id}>
+                            {tp.name} — {total}%
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.taxProfileId && (
+                <span className="text-xs text-red-500">{errors.taxProfileId.message}</span>
+              )}
+            </div>
 
             <div className="space-y-2">
               <label htmlFor="description" className="text-sm font-medium text-foreground">

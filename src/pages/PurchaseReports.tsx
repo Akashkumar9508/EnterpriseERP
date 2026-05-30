@@ -106,6 +106,7 @@ interface ProductWiseReport {
   averagePurchasePrice: number;
   latestPurchaseRate: number;
   supplierRates: SupplierRate[];
+  unitName?: string;
 }
 
 interface SupplierWiseReport {
@@ -141,6 +142,7 @@ interface PurchaseReturnItem {
   purchaseRate: number;
   taxAmount: number;
   totalAmount: number;
+  unitName?: string;
 }
 
 interface PurchaseReturnReport {
@@ -182,6 +184,7 @@ interface ExpiryReport {
   warehouseName: string;
   currentStock: number;
   status: string;
+  unitName?: string;
 }
 
 interface BatchWiseReport {
@@ -193,6 +196,7 @@ interface BatchWiseReport {
   supplierName: string;
   purchaseQuantity: number;
   currentStock: number;
+  unitName?: string;
 }
 
 interface LowMarginReport {
@@ -268,6 +272,8 @@ export default function PurchaseReports() {
   const [searchText, setSearchText] = useState<string>('');
   const [expandedInvoiceIds, setExpandedInvoiceIds] = useState<Record<string, boolean>>({});
   const [expandedReturnIds, setExpandedReturnIds] = useState<Record<string, boolean>>({});
+  const [invoiceItemsMap, setInvoiceItemsMap] = useState<Record<string, any[]>>({});
+  const [invoiceItemsLoading, setInvoiceItemsLoading] = useState<Record<string, boolean>>({});
 
   // Column Visibility States
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
@@ -408,8 +414,24 @@ export default function PurchaseReports() {
   }, [activeMainTab, selectedReportType, startDate, endDate, supplierId, warehouseId]);
 
   // Expandable invoice toggler
-  const toggleInvoiceExpand = (id: string) => {
-    setExpandedInvoiceIds(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleInvoiceExpand = async (id: string) => {
+    const isExpanding = !expandedInvoiceIds[id];
+    setExpandedInvoiceIds(prev => ({ ...prev, [id]: isExpanding }));
+    
+    if (isExpanding && !invoiceItemsMap[id]) {
+      setInvoiceItemsLoading(prev => ({ ...prev, [id]: true }));
+      try {
+        const response: any = await axiosClient.get(`/PurchaseInvoice/${id}`);
+        if (response?.success && response.data?.items) {
+          setInvoiceItemsMap(prev => ({ ...prev, [id]: response.data.items }));
+        }
+      } catch (err) {
+        console.error('Failed to load invoice items details', err);
+        toast.error('Failed to load invoice items details.');
+      } finally {
+        setInvoiceItemsLoading(prev => ({ ...prev, [id]: false }));
+      }
+    }
   };
 
   // Expandable return toggler
@@ -1178,7 +1200,11 @@ export default function PurchaseReports() {
                             <TableRow key={idx}>
                               {visibleColumns.prodName && <TableCell className="font-semibold text-zinc-900 dark:text-zinc-100">{p.productName}</TableCell>}
                               {visibleColumns.prodCode && <TableCell className="text-zinc-500 font-mono text-xs">{p.productCode}</TableCell>}
-                              {visibleColumns.prodQty && <TableCell className="text-right font-medium">{p.quantityPurchased.toLocaleString()}</TableCell>}
+                              {visibleColumns.prodQty && (
+                                <TableCell className="text-right font-medium whitespace-nowrap">
+                                  {p.quantityPurchased.toLocaleString()} <span className="text-[10px] text-muted-foreground font-sans font-medium">{p.unitName}</span>
+                                </TableCell>
+                              )}
                               {visibleColumns.prodAvg && <TableCell className="text-right">₹{p.averagePurchasePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>}
                               {visibleColumns.prodLatest && <TableCell className="text-right">₹{p.latestPurchaseRate.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>}
                             </TableRow>
@@ -1308,7 +1334,27 @@ export default function PurchaseReports() {
                                               </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                              <TableRow><TableCell colSpan={6} className="text-center text-xs py-4 text-zinc-400">Loading item breakdown...</TableCell></TableRow>
+                                              {invoiceItemsLoading[i.id] ? (
+                                                <TableRow><TableCell colSpan={6} className="text-center text-xs py-4 text-zinc-400">Loading item breakdown...</TableCell></TableRow>
+                                              ) : invoiceItemsMap[i.id]?.length > 0 ? (
+                                                invoiceItemsMap[i.id].map((item: any, idx: number) => (
+                                                  <TableRow key={idx} className="h-8">
+                                                    <TableCell className="text-xs">
+                                                      <div className="font-semibold text-zinc-900 dark:text-zinc-100">{item.productName}</div>
+                                                      <div className="text-[9px] text-zinc-400 font-mono leading-none mt-0.5">{item.productCode}</div>
+                                                    </TableCell>
+                                                    <TableCell className="text-xs text-right font-medium whitespace-nowrap">
+                                                      {item.quantity} <span className="text-[10px] text-muted-foreground font-sans font-medium">{item.unitName}</span>
+                                                    </TableCell>
+                                                    <TableCell className="text-xs text-right font-mono">₹{item.purchaseRate.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                                                    <TableCell className="text-xs text-right font-mono">{item.taxPercent}%</TableCell>
+                                                    <TableCell className="text-xs text-right font-mono">₹{item.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                                                    <TableCell className="text-xs text-right font-mono font-semibold text-zinc-900 dark:text-white">₹{item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
+                                                  </TableRow>
+                                                ))
+                                              ) : (
+                                                <TableRow><TableCell colSpan={6} className="text-center text-xs py-4 text-zinc-400">No items found</TableCell></TableRow>
+                                              )}
                                             </TableBody>
                                           </Table>
                                         </div>
@@ -1390,7 +1436,9 @@ export default function PurchaseReports() {
                                               {r.items.map((item, index) => (
                                                 <TableRow key={index} className="h-8">
                                                   <TableCell className="text-xs font-medium">{item.productName}</TableCell>
-                                                  <TableCell className="text-xs text-right">{item.quantity}</TableCell>
+                                                  <TableCell className="text-xs text-right whitespace-nowrap">
+                                                    {item.quantity} <span className="text-[10px] text-muted-foreground font-sans font-medium">{item.unitName}</span>
+                                                  </TableCell>
                                                   <TableCell className="text-xs text-right">₹{item.purchaseRate.toLocaleString()}</TableCell>
                                                   <TableCell className="text-xs text-right">₹{item.taxAmount.toLocaleString()}</TableCell>
                                                   <TableCell className="text-xs text-right font-semibold text-zinc-900 dark:text-white">₹{item.totalAmount.toLocaleString()}</TableCell>
@@ -1487,7 +1535,11 @@ export default function PurchaseReports() {
                               {visibleColumns.expBatch && <TableCell className="font-mono text-xs text-zinc-700 dark:text-zinc-300">{e.batchNumber}</TableCell>}
                               {visibleColumns.expDate && <TableCell className="text-xs font-medium">{new Date(e.expiryDate).toLocaleDateString()}</TableCell>}
                               {visibleColumns.expWh && <TableCell>{e.warehouseName}</TableCell>}
-                              {visibleColumns.expStock && <TableCell className="text-right font-semibold">{e.currentStock}</TableCell>}
+                              {visibleColumns.expStock && (
+                                 <TableCell className="text-right font-semibold whitespace-nowrap">
+                                   {e.currentStock} <span className="text-[10px] text-muted-foreground font-sans font-medium">{e.unitName}</span>
+                                 </TableCell>
+                               )}
                               {visibleColumns.expStatus && (
                                 <TableCell>
                                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border ${
@@ -1531,8 +1583,12 @@ export default function PurchaseReports() {
                               </TableCell>
                               <TableCell className="text-xs text-zinc-500">{b.expiryDate ? new Date(b.expiryDate).toLocaleDateString() : 'N/A'}</TableCell>
                               <TableCell>{b.supplierName}</TableCell>
-                              <TableCell className="text-right font-medium">{b.purchaseQuantity}</TableCell>
-                              <TableCell className={`text-right font-bold ${b.currentStock <= 0 ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`}>{b.currentStock}</TableCell>
+                              <TableCell className="text-right font-medium whitespace-nowrap">
+                                {b.purchaseQuantity} <span className="text-[10px] text-muted-foreground font-sans font-medium">{b.unitName}</span>
+                              </TableCell>
+                              <TableCell className={`text-right font-bold whitespace-nowrap ${b.currentStock <= 0 ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}`}>
+                                {b.currentStock} <span className="text-[10px] text-muted-foreground font-sans font-medium">{b.unitName}</span>
+                              </TableCell>
                             </TableRow>
                           ))
                         ) : (
