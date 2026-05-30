@@ -132,7 +132,8 @@ export default function InventoryStatus() {
           sku: item.sku,
           minStock: item.minStock,
           stocks: {},
-          totalStock: 0
+          totalStock: 0,
+          unitName: item.unitName
         });
       }
       
@@ -372,31 +373,34 @@ export default function InventoryStatus() {
                       <TableCell className="font-mono text-xs">{(pageNumber - 1) * pageSize + index + 1}</TableCell>
                       <TableCell>
                         <div className="font-semibold text-sm">{item.productName}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2">
+                        <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2 items-center">
                           <span>Code: {item.productCode}</span>
                           {item.sku && <span>• SKU: {item.sku}</span>}
+                          {item.unitName && <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-sm text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unit: {item.unitName}</span>}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                        {item.minStock?.toFixed(2) || '0.00'}
+                      <TableCell className="text-right font-mono text-xs text-muted-foreground whitespace-nowrap">
+                        {item.minStock?.toFixed(2) || '0.00'} <span className="text-[10px] text-zinc-400 font-sans font-medium">{item.unitName}</span>
                       </TableCell>
 
                       {/* Render stock in each warehouse column */}
                       {activeWarehouses.map(wh => {
                         const stock = item.stocks[wh.id] || 0;
                         return (
-                          <TableCell key={wh.id} className="text-right font-mono text-xs">
+                          <TableCell key={wh.id} className="text-right font-mono text-xs whitespace-nowrap">
                             <span className={stock <= 0 ? 'text-zinc-400' : 'text-zinc-800 dark:text-zinc-200'}>
                               {stock.toFixed(2)}
-                            </span>
+                            </span>{' '}
+                            <span className="text-[10px] text-zinc-400 font-sans font-medium">{item.unitName}</span>
                           </TableCell>
                         );
                       })}
 
-                      <TableCell className="text-right font-mono text-sm font-bold">
+                      <TableCell className="text-right font-mono text-sm font-bold whitespace-nowrap">
                         <span className={isOut ? 'text-red-500' : isLow ? 'text-amber-550 dark:text-amber-400' : 'text-zinc-900 dark:text-zinc-50'}>
                           {item.totalStock.toFixed(2)}
-                        </span>
+                        </span>{' '}
+                        <span className="text-[10px] text-zinc-400 font-sans font-medium">{item.unitName}</span>
                       </TableCell>
                       
                       <TableCell className="text-center align-middle">

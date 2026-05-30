@@ -667,14 +667,19 @@ export default function ManageStockTransfer() {
                         />
                       </div>
 
-                      <div className="w-[120px]">
-                        <FormField
-                          label="Qty"
-                          type="number"
-                          step="0.001"
-                          placeholder="1.000"
-                          {...register(`items.${index}.qty` as const, { required: true, min: 0.001 })}
-                        />
+                      <div className="w-[130px]">
+                        {(() => {
+                          const selectedProduct = products.find(p => p.id === watchProdId);
+                          return (
+                            <FormField
+                              label={selectedProduct?.unitName ? `Qty (${selectedProduct.unitName})` : "Qty"}
+                              type="number"
+                              step="0.001"
+                              placeholder="1.000"
+                              {...register(`items.${index}.qty` as const, { required: true, min: 0.001 })}
+                            />
+                          );
+                        })()}
                       </div>
 
                       {fields.length > 1 && (

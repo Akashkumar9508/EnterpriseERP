@@ -1583,8 +1583,8 @@ export default function CreatePurchaseInvoice() {
                     <TableHead className="w-[120px] px-1.5">Variant</TableHead>
                     <TableHead className="w-[110px] px-1.5">Batch No.</TableHead>
                     <TableHead className="w-[110px] px-1.5">Expiry Date</TableHead>
-                    <TableHead className="w-[70px] px-1.5 text-right">Qty</TableHead>
-                    <TableHead className="w-[75px] px-1.5 text-right">Free Qty</TableHead>
+                    <TableHead className="w-[110px] px-1.5 text-right">Qty</TableHead>
+                    <TableHead className="w-[115px] px-1.5 text-right">Free Qty</TableHead>
                     <TableHead className="w-[85px] px-1.5 text-right">Purchase Rate</TableHead>
                     <TableHead className="w-[85px] px-1.5 text-right">MRP</TableHead>
                     <TableHead className="w-[85px] px-1.5 text-right">Sales Rate</TableHead>
@@ -1605,13 +1605,13 @@ export default function CreatePurchaseInvoice() {
                     items.map((item, index) => {
                       const prodVariants = getVariantsForProduct(item.productId);
                       const prodBatches = getBatchesForProduct(item.productId);
+                      const selectedProduct = products.find(p => p.id === item.productId);
                       
                       return (
                         <TableRow key={index} className="align-middle">
                           <TableCell className="font-mono text-[10px] py-2 px-1 text-center">{index + 1}</TableCell>
                           <TableCell className="py-2 px-1.5">
                             {(() => {
-                              const selectedProduct = products.find(p => p.id === item.productId);
                               return (
                                 <button
                                   type="button"
@@ -1621,7 +1621,9 @@ export default function CreatePurchaseInvoice() {
                                   {selectedProduct ? (
                                     <div className="truncate pr-1">
                                       <div className="font-medium truncate">{selectedProduct.name}</div>
-                                      <div className="text-[9px] text-zinc-400 font-mono leading-none truncate mt-0.5">{selectedProduct.productCode}</div>
+                                      <div className="text-[9px] text-zinc-400 font-mono leading-none truncate mt-0.5">
+                                        {selectedProduct.productCode} {selectedProduct.unitName ? `• Unit: ${selectedProduct.unitName}` : ''}
+                                      </div>
                                     </div>
                                   ) : (
                                     <span className="text-zinc-400 dark:text-zinc-500">Select Product...</span>
@@ -1689,26 +1691,40 @@ export default function CreatePurchaseInvoice() {
                             />
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
-                            <Input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={item.quantity}
-                              onChange={(e) => handleNumericFieldChange(index, 'quantity', Number(e.target.value))}
-                              disabled={!item.productId}
-                              className="h-8 text-xs text-right font-mono px-1.5 py-1"
-                            />
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={item.quantity}
+                                onChange={(e) => handleNumericFieldChange(index, 'quantity', Number(e.target.value))}
+                                disabled={!item.productId}
+                                className="h-8 text-xs text-right font-mono px-1.5 py-1 w-full"
+                              />
+                              {selectedProduct?.unitName && (
+                                <span className="text-[10px] text-zinc-550 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                  {selectedProduct.unitName}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={item.freeQuantity}
-                              onChange={(e) => handleNumericFieldChange(index, 'freeQuantity', Number(e.target.value))}
-                              disabled={!item.productId}
-                              className="h-8 text-xs text-right font-mono px-1.5 py-1"
-                            />
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={item.freeQuantity}
+                                onChange={(e) => handleNumericFieldChange(index, 'freeQuantity', Number(e.target.value))}
+                                disabled={!item.productId}
+                                className="h-8 text-xs text-right font-mono px-1.5 py-1 w-full"
+                              />
+                              {selectedProduct?.unitName && (
+                                <span className="text-[10px] text-zinc-550 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                  {selectedProduct.unitName}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="py-2 px-1.5">
                             <Input
@@ -2032,9 +2048,10 @@ export default function CreatePurchaseInvoice() {
                   >
                     <td className="p-2.5 pl-3">
                       <div className="font-semibold text-zinc-900 dark:text-zinc-50">{p.name}</div>
-                      <div className="flex gap-2 text-[10px] text-zinc-400 font-mono mt-0.5">
+                      <div className="flex gap-2 text-[10px] text-zinc-400 font-mono mt-0.5 items-center">
                         <span>Code: {p.productCode}</span>
                         {p.sku && <span>• SKU: {p.sku}</span>}
+                        {p.unitName && <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-600 dark:text-zinc-400 font-semibold font-sans">Unit: {p.unitName}</span>}
                       </div>
                     </td>
                     <td className="p-2.5 text-right font-mono text-zinc-700 dark:text-zinc-350">

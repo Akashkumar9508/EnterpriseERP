@@ -49,6 +49,7 @@ interface InvoiceItem {
   taxPercent: number;
   taxAmount: number;
   totalAmount: number;
+  unitName?: string;
 }
 
 interface Invoice {
@@ -84,6 +85,7 @@ interface ReturnItem {
   taxPercent: number;
   taxAmount: number;
   totalAmount: number;
+  unitName?: string;
 }
 
 export default function CreatePurchaseReturn() {
@@ -187,7 +189,8 @@ export default function CreatePurchaseReturn() {
             purchaseRate: invItem.purchaseRate,
             taxPercent: invItem.taxPercent,
             taxAmount: 0,
-            totalAmount: 0
+            totalAmount: 0,
+            unitName: invItem.unitName
           };
         });
 
@@ -487,20 +490,31 @@ export default function CreatePurchaseReturn() {
                             {item.batchNumber && <div className="text-[10px] text-amber-600 dark:text-amber-450 mt-0.5">B: {item.batchNumber}</div>}
                             {!item.variantName && !item.batchNumber && <span className="text-zinc-400 italic font-sans">Base</span>}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs font-medium">{item.invoiceQty}</TableCell>
-                          <TableCell className="text-right font-mono text-xs text-amber-650">{item.previouslyReturnedQty}</TableCell>
+                          <TableCell className="text-right font-mono text-xs font-medium whitespace-nowrap">
+                            {item.invoiceQty} <span className="text-[10px] text-muted-foreground font-sans font-medium">{item.unitName}</span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-amber-650 whitespace-nowrap">
+                            {item.previouslyReturnedQty} <span className="text-[10px] text-amber-650/70 font-sans font-medium">{item.unitName}</span>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              min="0"
-                              max={item.maxReturnableQty}
-                              step="any"
-                              value={item.returnQty === 0 ? '' : item.returnQty}
-                              onChange={(e) => handleQtyChange(idx, e.target.value)}
-                              placeholder={`max ${item.maxReturnableQty}`}
-                              className="h-8 text-right font-mono font-bold text-red-650 dark:text-red-400 w-full text-xs px-2 border-red-200 focus-visible:ring-red-400 dark:border-red-950/40"
-                              disabled={item.maxReturnableQty === 0}
-                            />
+                            <div className="flex items-center gap-1 justify-end">
+                              <Input
+                                type="number"
+                                min="0"
+                                max={item.maxReturnableQty}
+                                step="any"
+                                value={item.returnQty === 0 ? '' : item.returnQty}
+                                onChange={(e) => handleQtyChange(idx, e.target.value)}
+                                placeholder={`max ${item.maxReturnableQty}`}
+                                className="h-8 text-right font-mono font-bold text-red-650 dark:text-red-400 w-full text-xs px-2 border-red-200 focus-visible:ring-red-400 dark:border-red-950/40"
+                                disabled={item.maxReturnableQty === 0}
+                              />
+                              {item.unitName && (
+                                <span className="text-[10px] text-zinc-550 bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-400 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                  {item.unitName}
+                                </span>
+                              )}
+                            </div>
                             {item.maxReturnableQty === 0 && (
                               <span className="text-[9px] text-red-550 block mt-0.5 text-right font-semibold">Fully Returned</span>
                             )}

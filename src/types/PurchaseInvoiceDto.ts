@@ -29,4 +29,5 @@ export interface PurchaseInvoiceDto {
 export interface PaymentDetailDto {
   paidAmount: number;
   paymentMode: number;
+  createdAt?: string;
 }

@@ -96,9 +96,12 @@ export default function ManagePurchaseInvoice() {
   // Payment Modal State
   const [payingInvoice, setPayingInvoice] = useState<PurchaseInvoiceDto | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
+  const [paymentMethod, setPaymentMethod] = useState<number>(1);
   const [paymentRemarks, setPaymentRemarks] = useState<string>('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [paymentSplits, setPaymentSplits] = useState<{ id: string; paidAmount: number; paymentMode: number }[]>([]);
+  const [currentSplitAmount, setCurrentSplitAmount] = useState<string>('');
+  const [currentSplitMode, setCurrentSplitMode] = useState<number>(1);
 
   const fetchInvoices = async () => {
     setIsLoading(true);
@@ -263,14 +266,33 @@ export default function ManagePurchaseInvoice() {
     
     setPayingInvoice(invoice);
     setPaymentAmount(due.toFixed(2));
-    setPaymentMethod('Cash');
+    setPaymentMethod(1);
+    setPaymentSplits([]);
+    setCurrentSplitAmount(due.toFixed(2));
+    setCurrentSplitMode(1);
     setPaymentRemarks('');
   };
 
   const handleRecordPayment = async () => {
     if (!payingInvoice || !payingInvoice.id) return;
     
-    const amount = parseFloat(paymentAmount) || 0;
+    let amount = 0;
+    let finalDetails: { paidAmount: number; paymentMode: number }[] = [];
+    
+    if (paymentSplits.length > 0) {
+      amount = paymentSplits.reduce((sum, p) => sum + p.paidAmount, 0);
+      finalDetails = paymentSplits.map(p => ({
+        paidAmount: p.paidAmount,
+        paymentMode: p.paymentMode
+      }));
+    } else {
+      amount = parseFloat(paymentAmount) || 0;
+      finalDetails = [{
+        paidAmount: amount,
+        paymentMode: paymentMethod
+      }];
+    }
+    
     const net = payingInvoice.netAmount || 0;
     const paid = payingInvoice.paidAmount || 0;
     const due = Math.max(0, net - paid);
@@ -289,7 +311,8 @@ export default function ManagePurchaseInvoice() {
     try {
       const response: any = await axiosClient.post(`/PurchaseInvoice/${payingInvoice.id}/pay`, {
         amount: amount,
-        paymentMethod: paymentMethod,
+        paymentMode: finalDetails[0].paymentMode,
+        paymentDetails: finalDetails,
         remarks: paymentRemarks
       });
       
@@ -856,37 +879,105 @@ export default function ManagePurchaseInvoice() {
                       </div>
                     </div>
                   </div>
-
-                  {/* ── Totals ── */}
-                  <div className="flex justify-end">
-                    <div className="w-80 bg-muted/30 border border-border rounded-xl overflow-hidden">
-                      <div className="px-5 py-3 bg-muted/40 border-b border-border">
-                        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Invoice Summary</span>
+                  {/* ── Payment History & Totals ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+                    
+                    {/* Payment History */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-emerald-500" /> Payment History
+                      </h4>
+                      <div className="border border-border rounded-xl overflow-hidden bg-muted/10">
+                        <table className="w-full text-xs font-mono border-collapse">
+                          <thead>
+                            <tr className="bg-muted/30 border-b border-border text-left text-muted-foreground uppercase font-sans font-bold tracking-wider">
+                              <th className="px-4 py-2.5">Date</th>
+                              <th className="px-4 py-2.5">Mode</th>
+                              <th className="px-4 py-2.5 text-right">Amount Paid</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {(!viewingInvoice.paymentDetails || viewingInvoice.paymentDetails.length === 0) ? (
+                              <tr>
+                                <td colSpan={3} className="px-4 py-6 text-center text-muted-foreground italic font-sans">
+                                  No payments recorded yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              viewingInvoice.paymentDetails.map((pay, pidx) => {
+                                const getModeLabel = (mode: number) => {
+                                  switch (mode) {
+                                    case 1: return "Cash";
+                                    case 2: return "Bank Transfer";
+                                    case 3: return "Card";
+                                    case 4: return "UPI";
+                                    case 5: return "Cheque";
+                                    default: return "Unknown";
+                                  }
+                                };
+                                return (
+                                  <tr key={pidx} className="hover:bg-muted/20 transition-colors">
+                                    <td className="px-4 py-2.5 font-sans text-zinc-650 dark:text-zinc-400">
+                                      {pay.createdAt ? new Date(pay.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <span className="px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[10px] uppercase font-bold font-sans">
+                                        {getModeLabel(pay.paymentMode)}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-right font-bold text-emerald-650 dark:text-emerald-400">
+                                      ₹{Number(pay.paidAmount).toFixed(2)}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
                       </div>
-                      <div className="px-5 py-4 space-y-3 font-mono text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Subtotal</span>
-                          <span className="font-semibold text-foreground">₹{Number(viewingInvoice.subTotal).toFixed(2)}</span>
+                    </div>
+
+                    {/* Totals Summary */}
+                    <div className="flex justify-end items-start">
+                      <div className="w-full max-w-sm bg-muted/30 border border-border rounded-xl overflow-hidden">
+                        <div className="px-5 py-3 bg-muted/40 border-b border-border">
+                          <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Invoice Summary</span>
                         </div>
-                        <div className="flex justify-between">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <TrendingDown className="h-3.5 w-3.5" /> Discount
+                        <div className="px-5 py-4 space-y-3 font-mono text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Subtotal</span>
+                            <span className="font-semibold text-foreground">₹{Number(viewingInvoice.subTotal).toFixed(2)}</span>
                           </div>
-                          <span className="font-semibold text-orange-600 dark:text-orange-400">− ₹{Number(viewingInvoice.discountAmount).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Tax (GST)</span>
-                          <span className="font-semibold text-blue-600 dark:text-blue-400">+ ₹{Number(viewingInvoice.taxAmount).toFixed(2)}</span>
-                        </div>
-                        <div className="h-px bg-border" />
-                        <div className="flex justify-between text-base font-bold pt-1">
-                          <span>Net Payable</span>
-                          <span className="text-green-600 dark:text-green-400">₹{Number(viewingInvoice.netAmount).toFixed(2)}</span>
+                          <div className="flex justify-between">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <TrendingDown className="h-3.5 w-3.5" /> Discount
+                            </div>
+                            <span className="font-semibold text-orange-600 dark:text-orange-400 font-bold">− ₹{Number(viewingInvoice.discountAmount).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Tax (GST)</span>
+                            <span className="font-semibold text-blue-600 dark:text-blue-400 font-bold">+ ₹{Number(viewingInvoice.taxAmount).toFixed(2)}</span>
+                          </div>
+                          <div className="h-px bg-border" />
+                          <div className="flex justify-between text-base font-bold pt-1">
+                            <span>Net Payable</span>
+                            <span className="text-green-600 dark:text-green-450 font-bold">₹{Number(viewingInvoice.netAmount).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs pt-1 border-t border-border/40">
+                            <span className="text-muted-foreground font-sans">Total Paid</span>
+                            <span className="text-emerald-650 dark:text-emerald-400 font-bold">₹{Number(viewingInvoice.paidAmount || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground font-sans">Remaining Due</span>
+                            <span className="text-red-650 font-bold">
+                              ₹{Math.max(0, viewingInvoice.netAmount - (viewingInvoice.paidAmount || 0)).toFixed(2)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -969,7 +1060,7 @@ export default function ManagePurchaseInvoice() {
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
               {/* Summary details */}
               <div className="grid grid-cols-2 gap-3 bg-muted/20 p-4 rounded-xl border border-border/60 text-sm font-medium">
                 <div>
@@ -994,37 +1085,192 @@ export default function ManagePurchaseInvoice() {
                 </div>
               </div>
 
-              {/* Amount to pay */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-500">Payment Amount (₹)</label>
-                <Input
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  max={Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0))}
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="h-10 font-mono font-bold text-lg text-emerald-600 focus-visible:ring-emerald-500"
-                  placeholder="0.00"
-                />
-              </div>
+              {/* Splits List if any exist */}
+              {paymentSplits.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider block">Payment Splits</label>
+                  <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
+                    {paymentSplits.map((p) => {
+                      const getModeLabel = (mode: number) => {
+                        switch (mode) {
+                          case 1: return "Cash";
+                          case 2: return "Bank Transfer";
+                          case 3: return "Card";
+                          case 4: return "UPI";
+                          case 5: return "Cheque";
+                          default: return "Unknown";
+                        }
+                      };
+                      return (
+                        <div key={p.id} className="flex items-center justify-between p-2.5 px-4 bg-muted/10 hover:bg-muted/20 transition-colors text-xs font-mono">
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-foreground">₹{p.paidAmount.toFixed(2)}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase font-semibold font-sans bg-zinc-150 dark:bg-zinc-800 px-2 py-0.5 rounded">
+                              {getModeLabel(p.paymentMode)}
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              const updated = paymentSplits.filter(item => item.id !== p.id);
+                              setPaymentSplits(updated);
+                              const baseDue = Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0));
+                              const nextRemaining = baseDue - updated.reduce((sum, sp) => sum + sp.paidAmount, 0);
+                              setCurrentSplitAmount(nextRemaining > 0 ? nextRemaining.toFixed(2) : '0.00');
+                            }}
+                            className="h-7 w-7 text-zinc-400 hover:text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-              {/* Payment Method */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-500">Payment Method</label>
-                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="w-full h-10">
-                    <SelectValue placeholder="Select Payment Mode" />
-                  </SelectTrigger>
-                  <SelectContent side="top">
-                    {['Cash', 'Bank Transfer', 'UPI', 'Credit Card'].map((mode) => (
-                      <SelectItem key={mode} value={mode}>
-                        {mode}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Add Split Section / Main Inputs */}
+              {paymentSplits.length === 0 ? (
+                // Simple Payment Mode
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-zinc-500">Payment Amount (₹)</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const baseDue = Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0));
+                          const val = parseFloat(paymentAmount) || 0;
+                          if (val > 0 && val <= baseDue) {
+                            setPaymentSplits([
+                              {
+                                id: `pay-${Date.now()}`,
+                                paidAmount: val,
+                                paymentMode: paymentMethod
+                              }
+                            ]);
+                            const remaining = baseDue - val;
+                            setCurrentSplitAmount(remaining > 0 ? remaining.toFixed(2) : '0.00');
+                            setCurrentSplitMode(1);
+                          } else {
+                            toast.warning('Please enter a valid amount to start splitting.');
+                          }
+                        }}
+                        className="text-xs text-violet-600 hover:text-violet-750 font-semibold dark:text-violet-400"
+                      >
+                        + Split Payment
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      step="any"
+                      min="0.01"
+                      max={Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0))}
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className="h-10 font-mono font-bold text-lg text-emerald-600 focus-visible:ring-emerald-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-zinc-500">Payment Method</label>
+                    <select 
+                      value={paymentMethod} 
+                      onChange={(e) => setPaymentMethod(Number(e.target.value))}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-zinc-950 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-800 cursor-pointer"
+                    >
+                      <option value={1}>Cash</option>
+                      <option value={2}>Bank Transfer</option>
+                      <option value={3}>Card</option>
+                      <option value={4}>UPI</option>
+                      <option value={5}>Cheque</option>
+                    </select>
+                  </div>
+                </div>
+              ) : (
+                // Split Payment builder mode
+                (() => {
+                  const baseDue = Math.max(0, payingInvoice.netAmount - (payingInvoice.paidAmount || 0));
+                  const totalPaidSplits = paymentSplits.reduce((sum, p) => sum + p.paidAmount, 0);
+                  const remainingPayable = Math.max(0, baseDue - totalPaidSplits);
+                  
+                  return remainingPayable > 0 ? (
+                    <div className="bg-muted/10 p-3 rounded-xl border border-border/60 space-y-3">
+                      <div className="text-xs font-semibold text-zinc-500">Add Next Split</div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Amount (₹)</label>
+                          <Input
+                            type="number"
+                            step="any"
+                            min="0.01"
+                            max={remainingPayable}
+                            value={currentSplitAmount}
+                            onChange={(e) => setCurrentSplitAmount(e.target.value)}
+                            className="h-9 font-mono text-xs"
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Mode</label>
+                          <select 
+                            value={currentSplitMode} 
+                            onChange={(e) => setCurrentSplitMode(Number(e.target.value))}
+                            className="w-full h-9 px-3 rounded-md border border-input bg-zinc-950 text-xs text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-800 cursor-pointer"
+                          >
+                            <option value={1}>Cash</option>
+                            <option value={2}>Bank Transfer</option>
+                            <option value={3}>Card</option>
+                            <option value={4}>UPI</option>
+                            <option value={5}>Cheque</option>
+                          </select>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const val = parseFloat(currentSplitAmount) || 0;
+                          if (val <= 0) {
+                            toast.error("Please enter a valid paid amount.");
+                            return;
+                          }
+                          if (val > remainingPayable + 0.01) {
+                            toast.error("Paid amount cannot exceed the remaining due amount.");
+                            return;
+                          }
+                          const newPayment = {
+                            id: `pay-${Date.now()}-${Math.random()}`,
+                            paidAmount: val,
+                            paymentMode: currentSplitMode
+                          };
+                          const updatedSplits = [...paymentSplits, newPayment];
+                          setPaymentSplits(updatedSplits);
+                          
+                          const nextRemaining = baseDue - updatedSplits.reduce((sum, p) => sum + p.paidAmount, 0);
+                          setCurrentSplitAmount(nextRemaining > 0 ? nextRemaining.toFixed(2) : '0.00');
+                          setCurrentSplitMode(1);
+                        }}
+                        className="w-full h-9 text-xs font-semibold gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:text-zinc-950"
+                      >
+                        <Plus className="h-4 w-4" /> Add Split
+                      </Button>
+                    </div>
+                  ) : null;
+                })()
+              )}
+
+              {/* Total Summary of payment */}
+              {paymentSplits.length > 0 && (
+                <div className="pt-3 border-t border-dashed border-border flex items-center justify-between text-xs font-semibold font-mono">
+                  <span className="text-zinc-500 font-sans">Total Paid Splits:</span>
+                  <span className="text-green-600 dark:text-green-450 font-bold text-sm">
+                    ₹{paymentSplits.reduce((sum, p) => sum + p.paidAmount, 0).toFixed(2)}
+                  </span>
+                </div>
+              )}
 
               {/* Remarks */}
               <div className="flex flex-col gap-1.5">
@@ -1033,7 +1279,7 @@ export default function ManagePurchaseInvoice() {
                   value={paymentRemarks}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPaymentRemarks(e.target.value)}
                   placeholder="E.g. Transaction ID, Cheque No, cash voucher details"
-                  className="flex min-h-[70px] w-full rounded-md border border-input bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800"
+                  className="flex min-h-[70px] w-full rounded-md border border-input bg-zinc-950 px-3 py-2 text-sm text-zinc-150 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800"
                 />
               </div>
             </div>
