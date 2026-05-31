@@ -53,6 +53,8 @@ export default function ManageCustomer() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,9 +70,17 @@ export default function ManageCustomer() {
   const fetchCustomers = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Customer');
+      const response: any = await axiosClient.get('/Customer', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setCustomers(response.data || []);
+        if (response.data && response.data.items) {
+          setCustomers(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setCustomers(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch customers', error);
@@ -84,28 +94,20 @@ export default function ManageCustomer() {
     if (canView) {
       fetchCustomers();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredCustomers = customers.filter((cust) => {
-    const searchLower = search.toLowerCase();
-    return (
-      cust.name.toLowerCase().includes(searchLower) ||
-      (cust.code && cust.code.toLowerCase().includes(searchLower)) ||
-      (cust.phone && cust.phone.toLowerCase().includes(searchLower)) ||
-      (cust.email && cust.email.toLowerCase().includes(searchLower)) ||
-      (cust.gstNumber && cust.gstNumber.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredCustomers.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedCustomers = filteredCustomers.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchCustomers();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({
@@ -241,14 +243,14 @@ export default function ManageCustomer() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedCustomers.length === 0 ? (
+              ) : customers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                     No customers found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedCustomers.map((cust, index) => (
+                customers.map((cust, index) => (
                   <TableRow key={cust.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -312,6 +314,7 @@ export default function ManageCustomer() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

@@ -53,6 +53,8 @@ export default function ManageManufacturer() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,9 +70,17 @@ export default function ManageManufacturer() {
   const fetchManufacturers = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Manufacturer');
+      const response: any = await axiosClient.get('/Manufacturer', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setManufacturers(response.data || []);
+        if (response.data && response.data.items) {
+          setManufacturers(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setManufacturers(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch manufacturers', error);
@@ -84,27 +94,20 @@ export default function ManageManufacturer() {
     if (canView) {
       fetchManufacturers();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredManufacturers = manufacturers.filter((mfr) => {
-    const searchLower = search.toLowerCase();
-    return (
-      mfr.name.toLowerCase().includes(searchLower) ||
-      (mfr.phone && mfr.phone.toLowerCase().includes(searchLower)) ||
-      (mfr.email && mfr.email.toLowerCase().includes(searchLower)) ||
-      (mfr.address && mfr.address.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredManufacturers.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedManufacturers = filteredManufacturers.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchManufacturers();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', phone: '', email: '', address: '' });
@@ -222,14 +225,14 @@ export default function ManageManufacturer() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedManufacturers.length === 0 ? (
+              ) : manufacturers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No manufacturers found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedManufacturers.map((mfr, index) => (
+                manufacturers.map((mfr, index) => (
                   <TableRow key={mfr.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -284,6 +287,7 @@ export default function ManageManufacturer() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

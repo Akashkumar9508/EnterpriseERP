@@ -115,6 +115,12 @@ export default function ManagePurchaseReturn() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
+  useEffect(() => {
+    if (user?.warehouseId) {
+      setSelectedWarehouseId(user.warehouseId);
+    }
+  }, [user?.warehouseId]);
+
   // Pagination States
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -140,9 +146,9 @@ export default function ManagePurchaseReturn() {
 
   const fetchWarehouses = async () => {
     try {
-      const response: any = await axiosClient.get('/Warehouse');
+      const response: any = await axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } });
       if (response?.success) {
-        setWarehouses(response.data || []);
+        setWarehouses(response.data?.items || response.data || []);
       }
     } catch (e) {
       console.error('Failed to load warehouses', e);
@@ -159,6 +165,9 @@ export default function ManagePurchaseReturn() {
   // Client-side filtering
   const filteredReturns = useMemo(() => {
     return returns.filter(ret => {
+      if (user?.warehouseId && ret.warehouseId !== user.warehouseId) {
+        return false;
+      }
       const supplierName = ret.supplierName || '';
       const returnNo = ret.returnNo || '';
       const invoiceNo = ret.invoiceNo || '';
@@ -361,7 +370,7 @@ export default function ManagePurchaseReturn() {
 
           <div className="h-5 w-px bg-border mx-1 shrink-0"></div>
 
-          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId} disabled={!!user?.warehouseId}>
             <SelectTrigger className="w-[160px] h-9 shrink-0">
               <SelectValue placeholder={user?.warehouseId ? (user.warehouseName || "Warehouse") : "All Warehouses"} />
             </SelectTrigger>

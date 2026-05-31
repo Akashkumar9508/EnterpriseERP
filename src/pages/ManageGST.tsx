@@ -51,6 +51,8 @@ export default function ManageGST() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -66,9 +68,17 @@ export default function ManageGST() {
   const fetchGstProfiles = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/TaxProfile');
+      const response: any = await axiosClient.get('/TaxProfile', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setGstProfiles(response.data || []);
+        if (response.data && response.data.items) {
+          setGstProfiles(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setGstProfiles(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch GST profiles', error);
@@ -82,22 +92,20 @@ export default function ManageGST() {
     if (canView) {
       fetchGstProfiles();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredProfiles = gstProfiles.filter((gst) => {
-    const searchLower = search.toLowerCase();
-    return gst.name.toLowerCase().includes(searchLower);
-  });
-
-  // Client-side pagination
-  const totalCount = filteredProfiles.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedProfiles = filteredProfiles.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchGstProfiles();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', cgst: 0, sgst: 0, igst: 0, cess: 0 });
@@ -220,14 +228,14 @@ export default function ManageGST() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedProfiles.length === 0 ? (
+              ) : gstProfiles.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                     No GST Profiles found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedProfiles.map((gst, index) => (
+                gstProfiles.map((gst, index) => (
                   <TableRow key={gst.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -282,7 +290,10 @@ export default function ManageGST() {
               <p>Rows per page</p>
               <Select
                 value={pageSize.toString()}
-                onValueChange={(val) => setPageSize(Number(val))}
+                onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setPageNumber(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />

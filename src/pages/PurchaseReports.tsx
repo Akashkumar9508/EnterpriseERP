@@ -61,6 +61,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import axiosClient from '@/Services/axiosClient';
+import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
@@ -239,16 +240,31 @@ type ReportType =
   | 'audit-log';
 
 export default function PurchaseReports() {
+  const user = useAppSelector((state) => state.auth.user);
+
   // Filter States
   const [supplierId, setSupplierId] = useState<string>('all');
-  const [warehouseId, setWarehouseId] = useState<string>('all');
-  const [datePreset, setDatePreset] = useState<string>('this-month');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  
+  const [warehouseId, setWarehouseId] = useState<string>(user?.warehouseId || 'all');
+
+  useEffect(() => {
+    if (user?.warehouseId) {
+      setWarehouseId(user.warehouseId);
+    }
+  }, [user?.warehouseId]);
+
   // Lookup Lists
   const [suppliers, setSuppliers] = useState<LookupItem[]>([]);
   const [warehouses, setWarehouses] = useState<LookupItem[]>([]);
+
+  const filteredWarehouses = useMemo(() => {
+    if (user?.warehouseId) {
+      return warehouses.filter(w => w.id === user.warehouseId);
+    }
+    return warehouses;
+  }, [warehouses, user?.warehouseId]);
+  const [datePreset, setDatePreset] = useState<string>('this-month');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   // Main navigation tab
   const [activeMainTab, setActiveMainTab] = useState<string>('analytics');
@@ -327,11 +343,11 @@ export default function PurchaseReports() {
     const fetchLookups = async () => {
       try {
         const [resSuppliers, resWarehouses] = await Promise.all([
-          axiosClient.get('/Supplier'),
-          axiosClient.get('/Warehouse')
+          axiosClient.get('/Supplier', { params: { pageNumber: 1, pageSize: 10000 } }),
+          axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } })
         ]) as [any, any];
-        if (resSuppliers?.success) setSuppliers(resSuppliers.data || []);
-        if (resWarehouses?.success) setWarehouses(resWarehouses.data || []);
+        if (resSuppliers?.success) setSuppliers(resSuppliers.data?.items || resSuppliers.data || []);
+        if (resWarehouses?.success) setWarehouses(resWarehouses.data?.items || resWarehouses.data || []);
       } catch (err) {
         console.error('Failed to load filters lookup data', err);
       }
@@ -787,13 +803,13 @@ export default function PurchaseReports() {
           {/* Warehouse selector */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5"><WarehouseIcon className="h-3 w-3" /> Warehouse</label>
-            <Select value={warehouseId} onValueChange={setWarehouseId}>
+            <Select value={warehouseId} onValueChange={setWarehouseId} disabled={!!user?.warehouseId}>
               <SelectTrigger className="w-full h-9 border-zinc-200/80 dark:border-white/5">
-                <SelectValue placeholder="Select Warehouse" />
+                <SelectValue placeholder={user?.warehouseId ? (user.warehouseName || "Warehouse") : "Select Warehouse"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Warehouses</SelectItem>
-                {warehouses.map(w => (
+                {!user?.warehouseId && <SelectItem value="all">All Warehouses</SelectItem>}
+                {filteredWarehouses.map(w => (
                   <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
                 ))}
               </SelectContent>

@@ -53,6 +53,8 @@ export default function ManageSupplier() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,9 +70,17 @@ export default function ManageSupplier() {
   const fetchSuppliers = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Supplier');
+      const response: any = await axiosClient.get('/Supplier', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setSuppliers(response.data || []);
+        if (response.data && response.data.items) {
+          setSuppliers(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setSuppliers(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch suppliers', error);
@@ -84,28 +94,20 @@ export default function ManageSupplier() {
     if (canView) {
       fetchSuppliers();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredSuppliers = suppliers.filter((supp) => {
-    const searchLower = search.toLowerCase();
-    return (
-      supp.name.toLowerCase().includes(searchLower) ||
-      (supp.code && supp.code.toLowerCase().includes(searchLower)) ||
-      (supp.phone && supp.phone.toLowerCase().includes(searchLower)) ||
-      (supp.email && supp.email.toLowerCase().includes(searchLower)) ||
-      (supp.gstNumber && supp.gstNumber.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredSuppliers.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedSuppliers = filteredSuppliers.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchSuppliers();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({
@@ -241,14 +243,14 @@ export default function ManageSupplier() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedSuppliers.length === 0 ? (
+              ) : suppliers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                     No suppliers found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedSuppliers.map((supp, index) => (
+                suppliers.map((supp, index) => (
                   <TableRow key={supp.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -312,6 +314,7 @@ export default function ManageSupplier() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

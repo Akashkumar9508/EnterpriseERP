@@ -132,3 +132,14 @@
     @apply font-sans;
     }
 }
+
+/* Hide number input spin-buttons globally */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}

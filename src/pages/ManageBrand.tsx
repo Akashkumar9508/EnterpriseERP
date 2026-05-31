@@ -65,12 +65,23 @@ export default function ManageBrand() {
     formState: { errors, isSubmitting },
   } = useForm<BrandDto>();
 
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
+
   const fetchBrands = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Brand');
+      const response: any = await axiosClient.get('/Brand', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setBrands(response.data || []);
+        if (response.data && response.data.items) {
+          setBrands(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setBrands(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch brands', error);
@@ -84,25 +95,20 @@ export default function ManageBrand() {
     if (canView) {
       fetchBrands();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredBrands = brands.filter((brand) => {
-    const searchLower = search.toLowerCase();
-    return (
-      brand.name.toLowerCase().includes(searchLower) ||
-      (brand.code && brand.code.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredBrands.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedBrands = filteredBrands.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchBrands();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', code: '' });
@@ -216,14 +222,14 @@ export default function ManageBrand() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedBrands.length === 0 ? (
+              ) : brands.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                     No brands found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedBrands.map((brand, index) => (
+                brands.map((brand, index) => (
                   <TableRow key={brand.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -282,6 +288,7 @@ export default function ManageBrand() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

@@ -47,12 +47,15 @@ export default function ManageCategory() {
   const user = useAppSelector((state) => state.auth.user);
 
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [allCategories, setAllCategories] = useState<CategoryDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Pagination & Search state
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -70,9 +73,17 @@ export default function ManageCategory() {
   const fetchCategories = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Category');
+      const response: any = await axiosClient.get('/Category', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setCategories(response.data || []);
+        if (response.data && response.data.items) {
+          setCategories(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setCategories(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch categories', error);
@@ -82,29 +93,47 @@ export default function ManageCategory() {
     }
   };
 
+  const fetchAllCategories = async () => {
+    try {
+      const response: any = await axiosClient.get('/Category', {
+        params: { pageNumber: 1, pageSize: 10000 }
+      });
+      if (response?.success) {
+        if (response.data && response.data.items) {
+          setAllCategories(response.data.items || []);
+        } else {
+          setAllCategories(response.data || []);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch all categories', error);
+    }
+  };
+
   useEffect(() => {
     if (canView) {
       fetchCategories();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredCategories = categories.filter((cat) => {
-    const searchLower = search.toLowerCase();
-    return (
-      cat.name.toLowerCase().includes(searchLower) ||
-      (cat.code && cat.code.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredCategories.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedCategories = filteredCategories.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      fetchAllCategories();
+    }
+  }, [canView]);
+
+  useEffect(() => {
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchCategories();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', code: '', parentCategoryId: null });
@@ -127,7 +156,7 @@ export default function ManageCategory() {
       // Calculate level number
       let levelNo = 1;
       if (data.parentCategoryId) {
-        const parent = categories.find((c) => c.id === data.parentCategoryId);
+        const parent = allCategories.find((c) => c.id === data.parentCategoryId);
         if (parent) {
           levelNo = parent.levelNo + 1;
         }
@@ -151,6 +180,7 @@ export default function ManageCategory() {
         setIsDialogOpen(false);
         toast.success(editingId ? 'Category updated successfully!' : 'Category created successfully!');
         fetchCategories();
+        fetchAllCategories();
       } else {
         toast.error(response?.message || 'Failed to save category');
       }
@@ -168,6 +198,7 @@ export default function ManageCategory() {
       if (response?.success) {
         toast.success('Category deleted successfully!');
         fetchCategories();
+        fetchAllCategories();
       } else {
         toast.error(response?.message || 'Failed to delete category');
       }
@@ -179,7 +210,7 @@ export default function ManageCategory() {
 
   const getParentName = (parentId: string | null | undefined) => {
     if (!parentId) return '-';
-    const parent = categories.find((c) => c.id === parentId);
+    const parent = allCategories.find((c) => c.id === parentId);
     return parent ? `${parent.name} (${parent.code || 'No Code'})` : '-';
   };
 
@@ -237,14 +268,14 @@ export default function ManageCategory() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedCategories.length === 0 ? (
+              ) : categories.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No categories found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedCategories.map((cat, index) => (
+                categories.map((cat, index) => (
                   <TableRow key={cat.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -309,6 +340,7 @@ export default function ManageCategory() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
@@ -401,7 +433,7 @@ export default function ManageCategory() {
                 </SelectTrigger>
                 <SelectContent side="bottom">
                   <SelectItem value="none">Root (No Parent)</SelectItem>
-                  {categories
+                  {allCategories
                     .filter((c) => c.id !== editingId)
                     .map((cat) => (
                       <SelectItem key={cat.id} value={cat.id || ''}>

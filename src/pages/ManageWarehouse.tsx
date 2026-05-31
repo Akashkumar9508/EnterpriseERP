@@ -53,6 +53,8 @@ export default function ManageWarehouse() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -68,9 +70,17 @@ export default function ManageWarehouse() {
   const fetchWarehouses = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Warehouse');
+      const response: any = await axiosClient.get('/Warehouse', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setWarehouses(response.data || []);
+        if (response.data && response.data.items) {
+          setWarehouses(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setWarehouses(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch warehouses', error);
@@ -84,27 +94,20 @@ export default function ManageWarehouse() {
     if (canView) {
       fetchWarehouses();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredWarehouses = warehouses.filter((wh) => {
-    const searchLower = search.toLowerCase();
-    return (
-      wh.name.toLowerCase().includes(searchLower) ||
-      (wh.code && wh.code.toLowerCase().includes(searchLower)) ||
-      (wh.phone && wh.phone.toLowerCase().includes(searchLower)) ||
-      (wh.address && wh.address.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredWarehouses.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedWarehouses = filteredWarehouses.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchWarehouses();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', code: '', phone: '', address: '' });
@@ -222,14 +225,14 @@ export default function ManageWarehouse() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedWarehouses.length === 0 ? (
+              ) : warehouses.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No warehouses found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedWarehouses.map((wh, index) => (
+                warehouses.map((wh, index) => (
                   <TableRow key={wh.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -292,6 +295,7 @@ export default function ManageWarehouse() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

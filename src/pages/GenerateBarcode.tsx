@@ -87,15 +87,15 @@ export default function GenerateBarcode() {
     setIsLoading(true);
     try {
       const [resProducts, resCategories] = await Promise.all([
-        axiosClient.get('/Product'),
-        axiosClient.get('/Category'),
+        axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 10000 } }),
+        axiosClient.get('/Category', { params: { pageNumber: 1, pageSize: 10000 } }),
       ]) as any[];
 
       if (resProducts?.success) {
-        setProducts(resProducts.data || []);
+        setProducts(resProducts.data?.items || resProducts.data || []);
       }
       if (resCategories?.success) {
-        setCategories(resCategories.data || []);
+        setCategories(resCategories.data?.items || resCategories.data || []);
       }
     } catch (error) {
       console.error('Failed to fetch data', error);
@@ -131,9 +131,9 @@ export default function GenerateBarcode() {
       if (response?.success) {
         toast.success(`Barcode generated successfully for ${p.name}!`);
         // Refresh products list
-        const resProducts: any = await axiosClient.get('/Product');
+        const resProducts: any = await axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 10000 } });
         if (resProducts?.success) {
-          const updatedProducts = resProducts.data || [];
+          const updatedProducts = resProducts.data?.items || resProducts.data || [];
           setProducts(updatedProducts);
           
           // If this product was selected, update its product reference in state

@@ -48,10 +48,12 @@ export default function ManageUnit() {
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Pagination & Search state (handled locally since API is simple)
+  // Pagination & Search state
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -69,9 +71,17 @@ export default function ManageUnit() {
   const fetchUnits = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Unit');
+      const response: any = await axiosClient.get('/Unit', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setUnits(response.data || []);
+        if (response.data && response.data.items) {
+          setUnits(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setUnits(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch units', error);
@@ -85,25 +95,20 @@ export default function ManageUnit() {
     if (canView) {
       fetchUnits();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredUnits = units.filter((unit) => {
-    const searchLower = search.toLowerCase();
-    return (
-      unit.name.toLowerCase().includes(searchLower) ||
-      (unit.symbol && unit.symbol.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredUnits.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedUnits = filteredUnits.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchUnits();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', symbol: '', decimalAllowed: false });
@@ -213,14 +218,14 @@ export default function ManageUnit() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedUnits.length === 0 ? (
+              ) : units.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     No units found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedUnits.map((unit, index) => (
+                units.map((unit, index) => (
                   <TableRow key={unit.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -287,6 +292,7 @@ export default function ManageUnit() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

@@ -217,12 +217,12 @@ export default function ManageStockAdjustment() {
     setIsProductsLoading(true);
     try {
       const [resProducts, resWarehouses] = await Promise.all([
-        axiosClient.get('/Product'),
-        axiosClient.get('/Warehouse'),
+        axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 10000 } }),
+        axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } }),
       ]) as any[];
 
-      if (resProducts?.success) setProducts(resProducts.data || []);
-      if (resWarehouses?.success) setWarehouses(resWarehouses.data || []);
+      if (resProducts?.success) setProducts(resProducts.data?.items || resProducts.data || []);
+      if (resWarehouses?.success) setWarehouses(resWarehouses.data?.items || resWarehouses.data || []);
     } catch (e) {
       console.error('Failed to load dependencies', e);
       toast.error('Failed to load products and warehouses.');

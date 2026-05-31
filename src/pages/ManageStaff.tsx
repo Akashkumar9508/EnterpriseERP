@@ -97,24 +97,17 @@ export default function ManageStaff() {
   const fetchStaff = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Staff');
+      const response: any = await axiosClient.get('/Staff', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        const items = response.data || [];
-        // Apply client side search filtering
-        const filtered = items.filter((s: StaffDto) => 
-          s.fullName.toLowerCase().includes(search.toLowerCase()) ||
-          (s.email && s.email.toLowerCase().includes(search.toLowerCase())) ||
-          (s.phone && s.phone.includes(search)) ||
-          (s.departmentName && s.departmentName.toLowerCase().includes(search.toLowerCase())) ||
-          (s.designationName && s.designationName.toLowerCase().includes(search.toLowerCase())) ||
-          (s.warehouseName && s.warehouseName.toLowerCase().includes(search.toLowerCase()))
-        );
-        setTotalCount(filtered.length);
-        
-        // Paginate client-side
-        const start = (pageNumber - 1) * pageSize;
-        const paginated = filtered.slice(start, start + pageSize);
-        setStaffList(paginated);
+        if (response.data && response.data.items) {
+          setStaffList(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setStaffList(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch staff', error);
@@ -127,19 +120,31 @@ export default function ManageStaff() {
   const fetchMetadata = async () => {
     try {
       const [deptRes, desRes, warehouseRes]: any[] = await Promise.all([
-        axiosClient.get('/Department'),
-        axiosClient.get('/Designation'),
-        axiosClient.get('/Warehouse')
+        axiosClient.get('/Department', { params: { pageNumber: 1, pageSize: 10000 } }),
+        axiosClient.get('/Designation', { params: { pageNumber: 1, pageSize: 10000 } }),
+        axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } })
       ]);
 
       if (deptRes?.success) {
-        setDepartments(deptRes.data || []);
+        if (deptRes.data && deptRes.data.items) {
+          setDepartments(deptRes.data.items || []);
+        } else {
+          setDepartments(deptRes.data || []);
+        }
       }
       if (desRes?.success) {
-        setDesignations(desRes.data || []);
+        if (desRes.data && desRes.data.items) {
+          setDesignations(desRes.data.items || []);
+        } else {
+          setDesignations(desRes.data || []);
+        }
       }
       if (warehouseRes?.success) {
-        setWarehouses(warehouseRes.data || []);
+        if (warehouseRes.data && warehouseRes.data.items) {
+          setWarehouses(warehouseRes.data.items || []);
+        } else {
+          setWarehouses(warehouseRes.data || []);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch metadata', error);
@@ -149,9 +154,14 @@ export default function ManageStaff() {
   useEffect(() => {
     if (canView) {
       fetchStaff();
-      fetchMetadata();
     }
   }, [canView, pageNumber, pageSize]);
+
+  useEffect(() => {
+    if (canView) {
+      fetchMetadata();
+    }
+  }, [canView]);
 
   useEffect(() => {
     if (canView) {
