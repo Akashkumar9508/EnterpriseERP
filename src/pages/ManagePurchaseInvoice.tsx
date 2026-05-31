@@ -85,6 +85,12 @@ export default function ManagePurchaseInvoice() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
+  useEffect(() => {
+    if (user?.warehouseId) {
+      setSelectedWarehouseId(user.warehouseId);
+    }
+  }, [user?.warehouseId]);
+
   // Pagination States
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -120,9 +126,9 @@ export default function ManagePurchaseInvoice() {
 
   const fetchWarehouses = async () => {
     try {
-      const response: any = await axiosClient.get('/Warehouse');
+      const response: any = await axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } });
       if (response?.success) {
-        setWarehouses(response.data || []);
+        setWarehouses(response.data?.items || response.data || []);
       }
     } catch (e) {
       console.error('Failed to load warehouses', e);
@@ -139,6 +145,9 @@ export default function ManagePurchaseInvoice() {
   // Client-side filtering
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv => {
+      if (user?.warehouseId && inv.warehouseId !== user.warehouseId) {
+        return false;
+      }
       const supplierName = inv.supplierName || '';
       const invoiceNo = inv.invoiceNo || '';
       const refNo = inv.referenceNo || '';
@@ -190,7 +199,7 @@ export default function ManagePurchaseInvoice() {
     let draftCount = 0;
     let totalSpend = 0;
 
-    invoices.forEach(inv => {
+    filteredInvoices.forEach(inv => {
       totalPurchases++;
       if (inv.status === 2) {
         postedCount++;
@@ -201,7 +210,7 @@ export default function ManagePurchaseInvoice() {
     });
 
     return { totalPurchases, postedCount, draftCount, totalSpend };
-  }, [invoices]);
+  }, [filteredInvoices]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this purchase invoice? Any inventory additions will be rolled back from the stock ledger.')) return;
@@ -478,7 +487,7 @@ export default function ManagePurchaseInvoice() {
 
           <div className="h-5 w-px bg-border mx-1 shrink-0"></div>
 
-          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId} disabled={!!user?.warehouseId}>
             <SelectTrigger className="w-[160px] h-9 shrink-0">
               <SelectValue placeholder={user?.warehouseId ? (user.warehouseName || "Warehouse") : "All Warehouses"} />
             </SelectTrigger>

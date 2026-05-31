@@ -52,6 +52,8 @@ export default function ManageState() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -69,9 +71,17 @@ export default function ManageState() {
   const fetchStates = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/State');
+      const response: any = await axiosClient.get('/State', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setStates(response.data || []);
+        if (response.data && response.data.items) {
+          setStates(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setStates(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch states', error);
@@ -85,26 +95,20 @@ export default function ManageState() {
     if (canView) {
       fetchStates();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredStates = states.filter((s) => {
-    const searchLower = search.toLowerCase();
-    return (
-      s.name.toLowerCase().includes(searchLower) ||
-      (s.code && s.code.toLowerCase().includes(searchLower)) ||
-      (s.country && s.country.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredStates.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedStates = filteredStates.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchStates();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', code: '', country: 'India', isActive: true });
@@ -216,14 +220,14 @@ export default function ManageState() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedStates.length === 0 ? (
+              ) : states.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No states found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedStates.map((s, index) => (
+                states.map((s, index) => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -292,7 +296,10 @@ export default function ManageState() {
               <p>Rows per page</p>
               <Select
                 value={pageSize.toString()}
-                onValueChange={(val) => setPageSize(Number(val))}
+                onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setPageNumber(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />

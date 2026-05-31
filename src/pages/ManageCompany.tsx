@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Pencil, Trash2, Plus, Loader2, Building } from 'lucide-react';
+import { Pencil, Trash2, Plus, Loader2, Building, UploadCloud, Image as ImageIcon } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import axiosClient from '@/Services/axiosClient';
+import axiosClient, { API_BASE } from '@/Services/axiosClient';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
@@ -147,6 +147,7 @@ export default function ManageCompany() {
       financialYearStart: new Date().toISOString().split('T')[0],
       address: '',
       packageId: silverPackage?.id || '',
+      logoUrl: '',
     });
     setEditingId(null);
     setIsDialogOpen(true);
@@ -164,6 +165,7 @@ export default function ManageCompany() {
       financialYearStart: c.financialYearStart ? c.financialYearStart.split('T')[0] : '',
       address: c.address || '',
       packageId: c.packageId || '',
+      logoUrl: c.logoUrl || '',
     });
     setEditingId(c.id || null);
     setIsDialogOpen(true);
@@ -188,6 +190,42 @@ export default function ManageCompany() {
     } catch (error: any) {
       console.error('Save error', error);
       toast.error(error?.message || 'An error occurred while saving.');
+    }
+  };
+
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('File size cannot exceed 2MB.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsUploading(true);
+    try {
+      const response: any = await axiosClient.post('/Company/upload-logo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (response?.success) {
+        setValue('logoUrl', response.data);
+        toast.success('Logo uploaded successfully!');
+      } else {
+        toast.error(response?.message || 'Failed to upload logo.');
+      }
+    } catch (err: any) {
+      console.error('Logo upload error', err);
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to upload logo.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -276,9 +314,21 @@ export default function ManageCompany() {
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
                     </TableCell>
-                    <TableCell className="font-medium flex items-center gap-2">
-                      <Building className="h-4 w-4 text-zinc-400" />
-                      {c.name}
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-3">
+                        {c.logoUrl ? (
+                          <img
+                            src={`${API_BASE}${c.logoUrl}`}
+                            alt={`${c.name} Logo`}
+                            className="h-10 w-10 object-contain rounded-lg border border-border bg-white p-1"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+                            <Building className="h-5 w-5" />
+                          </div>
+                        )}
+                        <span className="font-semibold text-foreground">{c.name}</span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{c.legalName || '-'}</TableCell>
                     <TableCell>
@@ -412,6 +462,63 @@ export default function ManageCompany() {
             <DialogTitle>{editingId ? 'Edit Company' : 'Create Company'}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
+            {/* Logo Upload Section */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-zinc-500">Company Logo</label>
+              <div className="flex items-center gap-4 p-3 bg-muted/20 border border-border rounded-xl">
+                {watch('logoUrl') ? (
+                  <div className="relative group shrink-0">
+                    <img
+                      src={`${API_BASE}${watch('logoUrl')}`}
+                      alt="Company Logo Preview"
+                      className="h-16 w-16 object-contain rounded-lg border border-border bg-white p-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setValue('logoUrl', '')}
+                      className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 transition shadow-sm"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="h-16 w-16 rounded-lg border border-border bg-muted flex items-center justify-center text-zinc-400 shrink-0">
+                    <ImageIcon className="h-7 w-7" />
+                  </div>
+                )}
+                <div className="flex-1 space-y-1.5">
+                  <div className="text-xs text-muted-foreground">
+                    Upload PNG, JPG, or WEBP. Max 2MB.
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="company-logo-input"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      disabled={isUploading}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploading}
+                      onClick={() => document.getElementById('company-logo-input')?.click()}
+                      className="h-8 gap-1.5 text-xs font-semibold"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UploadCloud className="h-3.5 w-3.5" />
+                      )}
+                      Upload Logo
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <FormField
               label="Company Name"
               placeholder="e.g. Acme Corp"

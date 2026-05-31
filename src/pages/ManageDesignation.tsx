@@ -56,6 +56,8 @@ export default function ManageDesignation() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -73,9 +75,17 @@ export default function ManageDesignation() {
   const fetchDesignations = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Designation');
+      const response: any = await axiosClient.get('/Designation', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setDesignations(response.data || []);
+        if (response.data && response.data.items) {
+          setDesignations(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setDesignations(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch designations', error);
@@ -87,9 +97,15 @@ export default function ManageDesignation() {
 
   const fetchDepartments = async () => {
     try {
-      const response: any = await axiosClient.get('/Department');
+      const response: any = await axiosClient.get('/Department', {
+        params: { pageNumber: 1, pageSize: 10000 }
+      });
       if (response?.success) {
-        setDepartments(response.data || []);
+        if (response.data && response.data.items) {
+          setDepartments(response.data.items || []);
+        } else {
+          setDepartments(response.data || []);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch departments', error);
@@ -99,28 +115,27 @@ export default function ManageDesignation() {
   useEffect(() => {
     if (canView) {
       fetchDesignations();
+    }
+  }, [canView, pageNumber, pageSize]);
+
+  useEffect(() => {
+    if (canView) {
       fetchDepartments();
     }
   }, [canView]);
 
-  // Client-side search filtering
-  const filteredDesignations = designations.filter((des) => {
-    const searchLower = search.toLowerCase();
-    return (
-      des.name.toLowerCase().includes(searchLower) ||
-      (des.description && des.description.toLowerCase().includes(searchLower)) ||
-      (des.departmentName && des.departmentName.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredDesignations.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedDesignations = filteredDesignations.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
-
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchDesignations();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', description: '', departmentId: '', isActive: true });
@@ -237,14 +252,14 @@ export default function ManageDesignation() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedDesignations.length === 0 ? (
+              ) : designations.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No designations found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedDesignations.map((des, index) => (
+                designations.map((des, index) => (
                   <TableRow key={des.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -307,7 +322,10 @@ export default function ManageDesignation() {
               <p>Rows per page</p>
               <Select
                 value={pageSize.toString()}
-                onValueChange={(val) => setPageSize(Number(val))}
+                onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setPageNumber(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />

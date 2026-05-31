@@ -230,9 +230,9 @@ export default function ProductAttributes() {
   const fetchProducts = async () => {
     setIsProductsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Product');
+      const response: any = await axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 10000 } });
       if (response?.success) {
-        setProducts(response.data || []);
+        setProducts(response.data?.items || response.data || []);
       }
     } catch (e) {
       console.error('Failed to load parent products', e);

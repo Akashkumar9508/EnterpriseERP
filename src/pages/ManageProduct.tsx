@@ -297,6 +297,8 @@ export default function ManageProduct() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -356,9 +358,17 @@ export default function ManageProduct() {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Product');
+      const response: any = await axiosClient.get('/Product', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setProducts(response.data || []);
+        if (response.data && response.data.items) {
+          setProducts(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setProducts(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch products', error);
@@ -370,21 +380,58 @@ export default function ManageProduct() {
 
   const fetchDropdownData = async () => {
     try {
+      const dropdownParams = { params: { pageNumber: 1, pageSize: 10000 } };
       const [resCats, resBrands, resMfrs, resHsn, resTax, resUnits] = (await Promise.all([
-        axiosClient.get('/Category'),
-        axiosClient.get('/Brand'),
-        axiosClient.get('/Manufacturer'),
-        axiosClient.get('/HSNCode'),
-        axiosClient.get('/TaxProfile'),
-        axiosClient.get('/Unit'),
+        axiosClient.get('/Category', dropdownParams),
+        axiosClient.get('/Brand', dropdownParams),
+        axiosClient.get('/Manufacturer', dropdownParams),
+        axiosClient.get('/HSNCode', dropdownParams),
+        axiosClient.get('/TaxProfile', dropdownParams),
+        axiosClient.get('/Unit', dropdownParams),
       ])) as any[];
 
-      if (resCats?.success) setCategories(resCats.data || []);
-      if (resBrands?.success) setBrands(resBrands.data || []);
-      if (resMfrs?.success) setManufacturers(resMfrs.data || []);
-      if (resHsn?.success) setHsnCodes(resHsn.data || []);
-      if (resTax?.success) setTaxProfiles(resTax.data || []);
-      if (resUnits?.success) setUnits(resUnits.data || []);
+      if (resCats?.success) {
+        if (resCats.data && resCats.data.items) {
+          setCategories(resCats.data.items || []);
+        } else {
+          setCategories(resCats.data || []);
+        }
+      }
+      if (resBrands?.success) {
+        if (resBrands.data && resBrands.data.items) {
+          setBrands(resBrands.data.items || []);
+        } else {
+          setBrands(resBrands.data || []);
+        }
+      }
+      if (resMfrs?.success) {
+        if (resMfrs.data && resMfrs.data.items) {
+          setManufacturers(resMfrs.data.items || []);
+        } else {
+          setManufacturers(resMfrs.data || []);
+        }
+      }
+      if (resHsn?.success) {
+        if (resHsn.data && resHsn.data.items) {
+          setHsnCodes(resHsn.data.items || []);
+        } else {
+          setHsnCodes(resHsn.data || []);
+        }
+      }
+      if (resTax?.success) {
+        if (resTax.data && resTax.data.items) {
+          setTaxProfiles(resTax.data.items || []);
+        } else {
+          setTaxProfiles(resTax.data || []);
+        }
+      }
+      if (resUnits?.success) {
+        if (resUnits.data && resUnits.data.items) {
+          setUnits(resUnits.data.items || []);
+        } else {
+          setUnits(resUnits.data || []);
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch product dependencies', error);
     }
@@ -393,32 +440,27 @@ export default function ManageProduct() {
   useEffect(() => {
     if (canView) {
       fetchProducts();
+    }
+  }, [canView, pageNumber, pageSize]);
+
+  useEffect(() => {
+    if (canView) {
       fetchDropdownData();
     }
   }, [canView]);
 
-  // Client-side search filtering
-  const filteredProducts = products.filter((p) => {
-    const searchLower = search.toLowerCase();
-    const catName = categories.find((c) => c.id === p.categoryId)?.name || '';
-    const brandName = brands.find((b) => b.id === p.brandId)?.name || '';
-    return (
-      p.name.toLowerCase().includes(searchLower) ||
-      p.productCode.toLowerCase().includes(searchLower) ||
-      (p.sku && p.sku.toLowerCase().includes(searchLower)) ||
-      catName.toLowerCase().includes(searchLower) ||
-      brandName.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredProducts.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedProducts = filteredProducts.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
-
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchProducts();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({
@@ -599,14 +641,14 @@ export default function ManageProduct() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedProducts.length === 0 ? (
+              ) : products.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                     No products found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedProducts.map((p, index) => {
+                products.map((p, index) => {
                   const catName = categories.find((c) => c.id === p.categoryId)?.name || '-';
                   const brandName = brands.find((b) => b.id === p.brandId)?.name || '-';
                   return (
@@ -724,7 +766,10 @@ export default function ManageProduct() {
               <p>Rows per page</p>
               <Select
                 value={pageSize.toString()}
-                onValueChange={(val) => setPageSize(Number(val))}
+                onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setPageNumber(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />

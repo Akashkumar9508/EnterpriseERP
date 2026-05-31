@@ -12,13 +12,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <SidebarTrigger className="-ml-2 text-muted-foreground hover:text-foreground" />
             <div className="w-px h-4 bg-border mx-2" />
-            <h1 className="font-medium text-sm text-foreground">Interprise Workspace</h1>
+            <h1 className="font-medium text-sm text-foreground">Enterprise Workspace</h1>
           </div>
           <ThemeToggle />
         </header>
         <div className="flex-1 p-6 min-w-0">
           {children}
         </div>
+        <footer className="py-6 px-6 border-t border-border/60 bg-muted/10 text-center text-xs text-muted-foreground space-y-1 shrink-0">
+          <p className="font-semibold text-zinc-700 dark:text-zinc-300">© 2026 Apex ERP</p>
+          <p className="font-medium text-zinc-500 dark:text-zinc-400">Powered by Codestrix Tech</p>
+          <p className="text-zinc-400 dark:text-zinc-500 text-[11px]">Version 1.0.0</p>
+        </footer>
       </main>
     </SidebarProvider>
   )

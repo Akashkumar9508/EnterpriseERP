@@ -54,6 +54,8 @@ export default function ManageDepartment() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -71,9 +73,17 @@ export default function ManageDepartment() {
   const fetchDepartments = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/Department');
+      const response: any = await axiosClient.get('/Department', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setDepartments(response.data || []);
+        if (response.data && response.data.items) {
+          setDepartments(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setDepartments(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch departments', error);
@@ -87,25 +97,20 @@ export default function ManageDepartment() {
     if (canView) {
       fetchDepartments();
     }
-  }, [canView]);
-
-  // Client-side search filtering
-  const filteredDepartments = departments.filter((dept) => {
-    const searchLower = search.toLowerCase();
-    return (
-      dept.name.toLowerCase().includes(searchLower) ||
-      (dept.description && dept.description.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredDepartments.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedDepartments = filteredDepartments.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+  }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchDepartments();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', description: '', isActive: true });
@@ -220,14 +225,14 @@ export default function ManageDepartment() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedDepartments.length === 0 ? (
+              ) : departments.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     No departments found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedDepartments.map((dept, index) => (
+                departments.map((dept, index) => (
                   <TableRow key={dept.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -287,7 +292,10 @@ export default function ManageDepartment() {
               <p>Rows per page</p>
               <Select
                 value={pageSize.toString()}
-                onValueChange={(val) => setPageSize(Number(val))}
+                onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setPageNumber(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />

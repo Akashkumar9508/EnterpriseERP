@@ -181,7 +181,20 @@ export default function ManageStockTransfer() {
 
   // Filter States
   const [search, setSearch] = useState('');
-  const [selectedFromWarehouseId, setSelectedFromWarehouseId] = useState('all');
+  const [selectedFromWarehouseId, setSelectedFromWarehouseId] = useState(user?.warehouseId || 'all');
+
+  useEffect(() => {
+    if (user?.warehouseId) {
+      setSelectedFromWarehouseId(user.warehouseId);
+    }
+  }, [user?.warehouseId]);
+
+  const filteredWarehouses = useMemo(() => {
+    if (user?.warehouseId) {
+      return warehouses.filter(w => w.id === user.warehouseId);
+    }
+    return warehouses;
+  }, [warehouses, user?.warehouseId]);
 
   // Pagination States
   const [pageNumber, setPageNumber] = useState(1);
@@ -221,13 +234,13 @@ export default function ManageStockTransfer() {
     setIsProductsLoading(true);
     try {
       const [resProducts, resWarehouses, resCompany] = await Promise.all([
-        axiosClient.get('/Product'),
-        axiosClient.get('/Warehouse'),
+        axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 10000 } }),
+        axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } }),
         axiosClient.get('/Company')
       ]) as any[];
 
-      if (resProducts?.success) setProducts(resProducts.data || []);
-      if (resWarehouses?.success) setWarehouses(resWarehouses.data || []);
+      if (resProducts?.success) setProducts(resProducts.data?.items || resProducts.data || []);
+      if (resWarehouses?.success) setWarehouses(resWarehouses.data?.items || resWarehouses.data || []);
       
       if (resCompany?.success && user?.companyId) {
         const matchingCompany = (resCompany.data || []).find((c: any) => c.id === user.companyId);
@@ -288,9 +301,11 @@ export default function ManageStockTransfer() {
       toast.warning('You need at least 2 warehouses/stores to perform a stock transfer.');
       return;
     }
+    const defaultFrom = user?.warehouseId || warehouses[0]?.id || '';
+    const defaultTo = user?.warehouseId === warehouses[0]?.id ? (warehouses[1]?.id || '') : (warehouses[0]?.id || '');
     reset({
-      fromWarehouseId: warehouses[0]?.id || '',
-      toWarehouseId: warehouses[1]?.id || '',
+      fromWarehouseId: defaultFrom,
+      toWarehouseId: defaultTo,
       transferDate: new Date().toISOString().split('T')[0],
       items: [{ productId: '', qty: 1 }]
     });
@@ -414,13 +429,14 @@ export default function ManageStockTransfer() {
             <Select
               value={selectedFromWarehouseId}
               onValueChange={setSelectedFromWarehouseId}
+              disabled={!!user?.warehouseId}
             >
               <SelectTrigger className="w-[180px] h-9">
-                <SelectValue placeholder="All Warehouses" />
+                <SelectValue placeholder={user?.warehouseId ? (user.warehouseName || "Warehouse") : "All Warehouses"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Warehouses</SelectItem>
-                {warehouses.map((w) => (
+                {!user?.warehouseId && <SelectItem value="all">All Warehouses</SelectItem>}
+                {filteredWarehouses.map((w) => (
                   <SelectItem key={w.id} value={w.id || ''}>
                     {w.name}
                   </SelectItem>
@@ -603,7 +619,7 @@ export default function ManageStockTransfer() {
                   {...register('fromWarehouseId', { required: true })}
                   className="w-full h-10 px-3 rounded-md border border-zinc-200 bg-white text-zinc-900 text-sm focus:outline-hidden focus:ring-1 focus:ring-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
                 >
-                  {warehouses.map((w) => (
+                  {filteredWarehouses.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name}
                     </option>

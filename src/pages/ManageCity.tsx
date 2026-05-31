@@ -54,6 +54,8 @@ export default function ManageCity() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -71,9 +73,17 @@ export default function ManageCity() {
   const fetchCities = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/City');
+      const response: any = await axiosClient.get('/City', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setCities(response.data || []);
+        if (response.data && response.data.items) {
+          setCities(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setCities(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch cities', error);
@@ -85,9 +95,15 @@ export default function ManageCity() {
 
   const fetchStates = async () => {
     try {
-      const response: any = await axiosClient.get('/State');
+      const response: any = await axiosClient.get('/State', {
+        params: { pageNumber: 1, pageSize: 10000 }
+      });
       if (response?.success) {
-        setStates(response.data || []);
+        if (response.data && response.data.items) {
+          setStates(response.data.items || []);
+        } else {
+          setStates(response.data || []);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch states', error);
@@ -97,28 +113,27 @@ export default function ManageCity() {
   useEffect(() => {
     if (canView) {
       fetchCities();
+    }
+  }, [canView, pageNumber, pageSize]);
+
+  useEffect(() => {
+    if (canView) {
       fetchStates();
     }
   }, [canView]);
 
-  // Client-side search filtering
-  const filteredCities = cities.filter((c) => {
-    const searchLower = search.toLowerCase();
-    return (
-      c.name.toLowerCase().includes(searchLower) ||
-      (c.code && c.code.toLowerCase().includes(searchLower)) ||
-      (c.stateName && c.stateName.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredCities.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedCities = filteredCities.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
-
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchCities();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ name: '', code: '', stateId: '', isActive: true });
@@ -230,14 +245,14 @@ export default function ManageCity() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedCities.length === 0 ? (
+              ) : cities.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No cities found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedCities.map((c, index) => (
+                cities.map((c, index) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -306,7 +321,10 @@ export default function ManageCity() {
               <p>Rows per page</p>
               <Select
                 value={pageSize.toString()}
-                onValueChange={(val) => setPageSize(Number(val))}
+                onValueChange={(val) => {
+                  setPageSize(Number(val));
+                  setPageNumber(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[70px]">
                   <SelectValue placeholder={pageSize} />

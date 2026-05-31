@@ -54,6 +54,8 @@ export default function ManageHSNCode() {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -70,9 +72,17 @@ export default function ManageHSNCode() {
   const fetchHsnCodes = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/HSNCode');
+      const response: any = await axiosClient.get('/HSNCode', {
+        params: { pageNumber, pageSize, search }
+      });
       if (response?.success) {
-        setHsnCodes(response.data || []);
+        if (response.data && response.data.items) {
+          setHsnCodes(response.data.items || []);
+          setTotalCount(response.data.totalCount || 0);
+        } else {
+          setHsnCodes(response.data || []);
+          setTotalCount((response.data || []).length);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch HSN codes', error);
@@ -85,9 +95,15 @@ export default function ManageHSNCode() {
   const fetchTaxProfiles = async () => {
     setIsTaxProfileLoading(true);
     try {
-      const response: any = await axiosClient.get('/TaxProfile');
+      const response: any = await axiosClient.get('/TaxProfile', {
+        params: { pageNumber: 1, pageSize: 10000 }
+      });
       if (response?.success) {
-        setTaxProfiles(response.data || []);
+        if (response.data && response.data.items) {
+          setTaxProfiles(response.data.items || []);
+        } else {
+          setTaxProfiles(response.data || []);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch tax profiles', error);
@@ -100,27 +116,27 @@ export default function ManageHSNCode() {
   useEffect(() => {
     if (canView) {
       fetchHsnCodes();
+    }
+  }, [canView, pageNumber, pageSize]);
+
+  useEffect(() => {
+    if (canView) {
       fetchTaxProfiles();
     }
   }, [canView]);
 
-  // Client-side search filtering
-  const filteredHsnCodes = hsnCodes.filter((hsn) => {
-    const searchLower = search.toLowerCase();
-    return (
-      hsn.code.toLowerCase().includes(searchLower) ||
-      (hsn.description && hsn.description.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Client-side pagination
-  const totalCount = filteredHsnCodes.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  const paginatedHsnCodes = filteredHsnCodes.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
-
   useEffect(() => {
-    setPageNumber(1);
-  }, [search, pageSize]);
+    if (canView) {
+      const delayDebounceFn = setTimeout(() => {
+        if (pageNumber === 1) {
+          fetchHsnCodes();
+        } else {
+          setPageNumber(1);
+        }
+      }, 500);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [search]);
 
   const openCreateDialog = () => {
     reset({ code: '', description: '', taxProfileId: undefined });
@@ -236,14 +252,14 @@ export default function ManageHSNCode() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : paginatedHsnCodes.length === 0 ? (
+              ) : hsnCodes.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                     No HSN codes found.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedHsnCodes.map((hsn, index) => (
+                hsnCodes.map((hsn, index) => (
                   <TableRow key={hsn.id}>
                     <TableCell className="font-medium">
                       {(pageNumber - 1) * pageSize + index + 1}
@@ -303,6 +319,7 @@ export default function ManageHSNCode() {
                 value={pageSize.toString()}
                 onValueChange={(val) => {
                   setPageSize(Number(val));
+                  setPageNumber(1);
                 }}
               >
                 <SelectTrigger className="h-8 w-[70px]">

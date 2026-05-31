@@ -11,4 +11,5 @@ export interface CompanyDto {
   address?: string;
   packageId?: string;
   packageName?: string;
+  logoUrl?: string;
 }
