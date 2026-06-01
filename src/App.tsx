@@ -27,6 +27,7 @@ import CreatePurchaseInvoice from "@/pages/CreatePurchaseInvoice"
 import ManageBrand from "@/pages/ManageBrand"
 import ManageManufacturer from "@/pages/ManageManufacturer"
 import ManageWarehouse from "@/pages/ManageWarehouse"
+import ManageBranch from "@/pages/ManageBranch"
 import ManageHSNCode from "@/pages/ManageHSNCode"
 import ManageCustomer from "@/pages/ManageCustomer"
 import ManageSupplier from "@/pages/ManageSupplier"
@@ -133,6 +134,7 @@ export function App() {
                   <Route path="brand" element={<ManageBrand />} />
                   <Route path="manufacturer" element={<ManageManufacturer />} />
                   <Route path="warehouse" element={<ManageWarehouse />} />
+                  <Route path="branch" element={<ManageBranch />} />
                   <Route path="hsncode" element={<ManageHSNCode />} />
                   <Route path="customer" element={<ManageCustomer />} />
                   <Route path="supplier" element={<ManageSupplier />} />

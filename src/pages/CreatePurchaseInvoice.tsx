@@ -58,7 +58,7 @@ interface PreviewHeader {
   invoiceDate: string
   referenceNo: string
   remarks: string
-  errors: {
+  errors: { 
     supplier?: string
     warehouse?: string
     invoiceNo?: string
