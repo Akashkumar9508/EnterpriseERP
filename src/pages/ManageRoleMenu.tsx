@@ -409,8 +409,10 @@ export default function ManageRoleMenu() {
                       canDelete: false
                     };
 
+                    const uniqueKey = `${p.pageId}-${p.menuId || 'standalone'}`;
+
                     return (
-                      <div key={p.pageId} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-zinc-50/50 dark:hover:bg-white/[0.02] transition duration-150 px-2 rounded-lg">
+                      <div key={uniqueKey} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-zinc-50/50 dark:hover:bg-white/[0.02] transition duration-150 px-2 rounded-lg">
                         {/* Page Name on the Left */}
                         <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                           {p.pageName}
@@ -422,13 +424,13 @@ export default function ManageRoleMenu() {
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              id={`chk-view-${p.pageId}`}
+                              id={`chk-view-${uniqueKey}`}
                               checked={perm.canView}
                               onChange={(e) => handleCheckboxChange(p.pageId, p.menuId || null, 'canView', e.target.checked)}
                               className="h-4.5 w-4.5 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600"
                             />
                             <label
-                              htmlFor={`chk-view-${p.pageId}`}
+                              htmlFor={`chk-view-${uniqueKey}`}
                               className="text-xs font-bold text-blue-600 dark:text-blue-400 cursor-pointer hover:text-blue-700 select-none"
                             >
                               View
@@ -439,13 +441,13 @@ export default function ManageRoleMenu() {
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              id={`chk-create-${p.pageId}`}
+                              id={`chk-create-${uniqueKey}`}
                               checked={perm.canCreate}
                               onChange={(e) => handleCheckboxChange(p.pageId, p.menuId || null, 'canCreate', e.target.checked)}
                               className="h-4.5 w-4.5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
                             />
                             <label
-                              htmlFor={`chk-create-${p.pageId}`}
+                              htmlFor={`chk-create-${uniqueKey}`}
                               className="text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer hover:text-emerald-700 select-none"
                             >
                               Create
@@ -456,13 +458,13 @@ export default function ManageRoleMenu() {
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              id={`chk-edit-${p.pageId}`}
+                              id={`chk-edit-${uniqueKey}`}
                               checked={perm.canEdit}
                               onChange={(e) => handleCheckboxChange(p.pageId, p.menuId || null, 'canEdit', e.target.checked)}
                               className="h-4.5 w-4.5 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 cursor-pointer accent-amber-500"
                             />
                             <label
-                              htmlFor={`chk-edit-${p.pageId}`}
+                              htmlFor={`chk-edit-${uniqueKey}`}
                               className="text-xs font-bold text-amber-500 dark:text-amber-400 cursor-pointer hover:text-amber-600 select-none"
                             >
                               Edit
@@ -473,13 +475,13 @@ export default function ManageRoleMenu() {
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              id={`chk-delete-${p.pageId}`}
+                              id={`chk-delete-${uniqueKey}`}
                               checked={perm.canDelete}
                               onChange={(e) => handleCheckboxChange(p.pageId, p.menuId || null, 'canDelete', e.target.checked)}
                               className="h-4.5 w-4.5 rounded border-zinc-300 text-rose-600 focus:ring-rose-500 cursor-pointer accent-rose-600"
                             />
                             <label
-                              htmlFor={`chk-delete-${p.pageId}`}
+                              htmlFor={`chk-delete-${uniqueKey}`}
                               className="text-xs font-bold text-rose-600 dark:text-rose-400 cursor-pointer hover:text-rose-700 select-none"
                             >
                               Delete

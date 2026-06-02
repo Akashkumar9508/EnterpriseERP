@@ -416,7 +416,7 @@ export default function PurchaseDashboard() {
                   <span className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-semibold px-2 py-0.5 rounded-md">
                     {summaryData?.totalPurchases || 0} Invoices
                   </span>
-                  <span className="text-zinc-400">received in period</span>
+                  <span className="text-muted-foreground">received in period</span>
                 </div>
               </CardContent>
             </Card>
@@ -436,7 +436,7 @@ export default function PurchaseDashboard() {
                   <span className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 font-semibold px-2 py-0.5 rounded-md">
                     Active Catalog
                   </span>
-                  <span className="text-zinc-400">products items</span>
+                  <span className="text-muted-foreground">products items</span>
                 </div>
               </CardContent>
             </Card>
@@ -456,7 +456,7 @@ export default function PurchaseDashboard() {
                   <span className="bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 font-semibold px-2 py-0.5 rounded-md">
                     Vendors
                   </span>
-                  <span className="text-zinc-400">supplying logistics</span>
+                  <span className="text-muted-foreground">supplying logistics</span>
                 </div>
               </CardContent>
             </Card>
@@ -476,7 +476,7 @@ export default function PurchaseDashboard() {
                   <span className="bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-semibold px-2 py-0.5 rounded-md">
                     Depots
                   </span>
-                  <span className="text-zinc-400">active store locations</span>
+                  <span className="text-muted-foreground">active store locations</span>
                 </div>
               </CardContent>
             </Card>
@@ -529,7 +529,7 @@ export default function PurchaseDashboard() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="h-44 flex items-center justify-center text-zinc-400 text-xs">No recent invoices found.</div>
+                  <div className="h-44 flex items-center justify-center text-muted-foreground text-xs">No recent invoices found.</div>
                 )}
               </CardContent>
             </Card>
@@ -549,7 +549,7 @@ export default function PurchaseDashboard() {
                     <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                     <div>
                       <div className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Near Expiry Stocks</div>
-                      <div className="text-[10px] text-zinc-400">Expiring soon in inventory</div>
+                      <div className="text-[10px] text-muted-foreground">Expiring soon in inventory</div>
                     </div>
                   </div>
                   <span className="text-lg font-bold text-amber-600 dark:text-amber-400">{expiryData.length}</span>
@@ -561,7 +561,7 @@ export default function PurchaseDashboard() {
                     <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                     <div>
                       <div className="font-semibold text-xs text-zinc-700 dark:text-zinc-300">Low Margin Warnings</div>
-                      <div className="text-[10px] text-zinc-400">Items with low profit margin</div>
+                      <div className="text-[10px] text-muted-foreground">Items with low profit margin</div>
                     </div>
                   </div>
                   <span className="text-lg font-bold text-rose-600 dark:text-rose-400">
@@ -605,7 +605,7 @@ export default function PurchaseDashboard() {
                       </AreaChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-zinc-400 text-xs">No monthly trends data available for this range.</div>
+                    <div className="h-full flex items-center justify-center text-muted-foreground text-xs">No monthly trends data available for this range.</div>
                   )}
                 </div>
               </CardContent>
@@ -642,13 +642,13 @@ export default function PurchaseDashboard() {
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-zinc-400 text-xs">No payment status data available.</div>
+                    <div className="h-full flex items-center justify-center text-muted-foreground text-xs">No payment status data available.</div>
                   )}
 
                   {/* Central Text inside Pie */}
                   {summaryData?.totalAmount ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                      <span className="text-zinc-400 text-[10px] uppercase font-bold tracking-wider">Unpaid</span>
+                      <span className="text-muted-foreground text-[10px] uppercase font-bold tracking-wider">Unpaid</span>
                       <span className="text-lg font-bold text-rose-600 dark:text-rose-400">
                         {((summaryData.pendingPayments / summaryData.totalAmount) * 100).toFixed(0)}%
                       </span>
@@ -699,7 +699,7 @@ export default function PurchaseDashboard() {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-zinc-400 text-xs">No vendor data available.</div>
+                    <div className="h-full flex items-center justify-center text-muted-foreground text-xs">No vendor data available.</div>
                   )}
                 </div>
               </CardContent>
@@ -730,7 +730,7 @@ export default function PurchaseDashboard() {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-zinc-400 text-xs">No product data available.</div>
+                    <div className="h-full flex items-center justify-center text-muted-foreground text-xs">No product data available.</div>
                   )}
                 </div>
               </CardContent>
@@ -773,7 +773,7 @@ export default function PurchaseDashboard() {
                           <TableRow key={idx} className="hover:bg-zinc-50 dark:hover:bg-white/5 border-zinc-100 dark:border-white/5">
                             <TableCell className="font-medium">
                               <div>{e.productName}</div>
-                              <div className="text-[10px] text-zinc-400">{e.productCode}</div>
+                              <div className="text-[10px] text-muted-foreground">{e.productCode}</div>
                             </TableCell>
                             <TableCell>{e.batchNumber}</TableCell>
                             <TableCell className="font-semibold text-rose-600 dark:text-rose-400">
@@ -786,7 +786,7 @@ export default function PurchaseDashboard() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="h-44 flex flex-col items-center justify-center text-zinc-400 text-xs">
+                  <div className="h-44 flex flex-col items-center justify-center text-muted-foreground text-xs">
                     <CheckCircle2 className="h-8 w-8 text-emerald-500 mb-2" />
                     No inventory near expiry or expired!
                   </div>
@@ -826,7 +826,7 @@ export default function PurchaseDashboard() {
                           <TableRow key={idx} className="hover:bg-zinc-50 dark:hover:bg-white/5 border-zinc-100 dark:border-white/5">
                             <TableCell className="font-medium">
                               <div>{l.productName}</div>
-                              <div className="text-[10px] text-zinc-400">{l.productCode}</div>
+                              <div className="text-[10px] text-muted-foreground">{l.productCode}</div>
                             </TableCell>
                             <TableCell className="text-right">{formatCurrency(l.purchaseRate)}</TableCell>
                             <TableCell className="text-right">{formatCurrency(l.salesRate)}</TableCell>
@@ -839,7 +839,7 @@ export default function PurchaseDashboard() {
                     </Table>
                   </div>
                 ) : (
-                  <div className="h-44 flex flex-col items-center justify-center text-zinc-400 text-xs">
+                  <div className="h-44 flex flex-col items-center justify-center text-muted-foreground text-xs">
                     <CheckCircle2 className="h-8 w-8 text-emerald-500 mb-2" />
                     All product sales margins are healthy!
                   </div>

@@ -440,7 +440,7 @@ export default function ManagePurchaseReturn() {
                     </TableCell>
                     <TableCell className="text-sm font-semibold font-mono">
                       {ret.invoiceNo ? (
-                        <div className="text-indigo-650 dark:text-indigo-400">{ret.invoiceNo}</div>
+                        <div className="text-indigo-600 dark:text-indigo-400">{ret.invoiceNo}</div>
                       ) : (
                         <span className="text-zinc-400 italic font-normal text-xs">Ad-hoc Return</span>
                       )}

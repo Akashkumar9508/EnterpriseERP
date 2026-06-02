@@ -24,6 +24,8 @@ import ManageStockTransfer from "@/pages/ManageStockTransfer"
 import InventoryStatus from "@/pages/InventoryStatus"
 import ManagePurchaseInvoice from "@/pages/ManagePurchaseInvoice"
 import CreatePurchaseInvoice from "@/pages/CreatePurchaseInvoice"
+import ManagePurchaseOrder from "@/pages/ManagePurchaseOrder"
+import ReceivePurchaseOrder from "@/pages/ReceivePurchaseOrder"
 import ManageBrand from "@/pages/ManageBrand"
 import ManageManufacturer from "@/pages/ManageManufacturer"
 import ManageWarehouse from "@/pages/ManageWarehouse"
@@ -118,6 +120,22 @@ export function App() {
                   <Route
                     path="purchase-invoice/edit/:id"
                     element={<CreatePurchaseInvoice />}
+                  />
+                  <Route
+                    path="purchaseorder"
+                    element={<ManagePurchaseOrder />}
+                  />
+                  <Route
+                    path="purchaseorder/receive/:id"
+                    element={<ReceivePurchaseOrder />}
+                  />
+                  <Route
+                    path="purchase-order"
+                    element={<ManagePurchaseOrder />}
+                  />
+                  <Route
+                    path="purchase-order/receive/:id"
+                    element={<ReceivePurchaseOrder />}
                   />
                   <Route
                     path="purchase-return"
