@@ -915,7 +915,8 @@ export default function CreateSalesInvoice() {
               ? "Sales Invoice draft updated successfully!"
               : "Sales Invoice saved as draft!"
         )
-        navigate("/sales-invoice")
+        const savedId = response.data?.id || response.data?.Id || editId
+        navigate("/sales-invoice", { state: { autoViewInvoiceId: savedId } })
       } else {
         toast.error(response?.message || "Failed to save sales invoice.")
       }

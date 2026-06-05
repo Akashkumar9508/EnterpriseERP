@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
   Trash2, 
@@ -24,7 +24,8 @@ import {
   Receipt,
   Ban,
   Wallet,
-  TrendingDown
+  TrendingDown,
+  Printer
 } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -58,13 +59,25 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
+import { generatePurchaseInvoicePdf } from '@/utils/purchaseInvoicePdf';
+
 import type { PurchaseInvoiceDto } from '@/types/PurchaseInvoiceDto';
 import type { WarehouseDto } from '@/types/WarehouseDto';
 
 export default function ManagePurchaseInvoice() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { canView, canCreate, canDelete } = usePermissions('/purchase-invoice');
   const user = useAppSelector((state) => state.auth.user);
+
+  useEffect(() => {
+    const stateVal = location.state as { autoViewInvoiceId?: string } | null;
+    if (stateVal?.autoViewInvoiceId) {
+      handleView(stateVal.autoViewInvoiceId);
+      // Clear location state to prevent modal reopening on page refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Core States
   const [invoices, setInvoices] = useState<PurchaseInvoiceDto[]>([]);
@@ -265,6 +278,40 @@ export default function ManagePurchaseInvoice() {
       toast.error('Failed to load invoice details.');
     } finally {
       setIsLoadingView(false);
+    }
+  };
+
+  const handleDownloadPdf = async (invoice: PurchaseInvoiceDto) => {
+    let fullInvoice = invoice;
+    if (!invoice.items || invoice.items.length === 0) {
+      try {
+        const res: any = await axiosClient.get(`/PurchaseInvoice/${invoice.id}`);
+        if (res?.success && res.data) {
+          fullInvoice = res.data;
+        } else {
+          toast.error('Failed to load invoice items for PDF receipt.');
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to load full purchase invoice details', err);
+        toast.error('Error loading invoice items for PDF receipt.');
+        return;
+      }
+    }
+
+    try {
+      let companyInfo = undefined;
+      const response: any = await axiosClient.get('/Company');
+      if (response?.success) {
+        const companies = response.data || [];
+        const warehouseObj = warehouses.find(w => w.id === fullInvoice.warehouseId);
+        const targetCompanyId = warehouseObj?.companyId || fullInvoice.companyId || user?.companyId;
+        companyInfo = companies.find((c: any) => c.id === targetCompanyId);
+      }
+      generatePurchaseInvoicePdf(fullInvoice, companyInfo);
+    } catch (e) {
+      console.error('Failed to fetch company details for PDF', e);
+      generatePurchaseInvoicePdf(fullInvoice);
     }
   };
 
@@ -645,6 +692,17 @@ export default function ManagePurchaseInvoice() {
                             <Ban className="h-4.5 w-4.5" />
                           </Button>
                         )}
+
+                        {/* Print PDF */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-zinc-50 hover:text-zinc-650 dark:hover:bg-zinc-950/20 dark:hover:text-zinc-400"
+                          onClick={() => handleDownloadPdf(inv)}
+                          title="Print / Download PDF"
+                        >
+                          <Printer className="h-4 w-4 text-indigo-500" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1020,6 +1078,14 @@ export default function ManagePurchaseInvoice() {
                       <Ban className="h-4 w-4" /> Cancel Invoice
                     </Button>
                   )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 px-4 text-sm gap-2 text-violet-600 border-violet-200 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-400 dark:hover:bg-violet-950/20"
+                    onClick={() => handleDownloadPdf(viewingInvoice)}
+                  >
+                    <Printer className="h-4 w-4" /> Download PDF Receipt
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"

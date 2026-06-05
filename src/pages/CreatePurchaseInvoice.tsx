@@ -972,7 +972,8 @@ export default function CreatePurchaseInvoice() {
               ? "Purchase Invoice draft updated successfully!"
               : "Purchase Invoice saved as draft!"
         )
-        navigate("/purchase-invoice")
+        const savedId = response.data?.id || response.data?.Id || editId
+        navigate("/purchase-invoice", { state: { autoViewInvoiceId: savedId } })
       } else {
         toast.error(response?.message || "Failed to save purchase invoice.")
       }
@@ -1990,7 +1991,8 @@ export default function CreatePurchaseInvoice() {
               : "Purchase Invoice saved as draft!"
         )
         setIsPreviewOpen(false)
-        navigate("/purchase-invoice")
+        const savedId = response.data?.id || response.data?.Id || editId
+        navigate("/purchase-invoice", { state: { autoViewInvoiceId: savedId } })
       } else {
         toast.error(response?.message || "Failed to save purchase invoice.")
       }

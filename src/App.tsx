@@ -34,10 +34,13 @@ import ManageHSNCode from "@/pages/ManageHSNCode"
 import ManageCustomer from "@/pages/ManageCustomer"
 import ManageSupplier from "@/pages/ManageSupplier"
 import PurchaseReports from "@/pages/PurchaseReports"
+import SalesReports from "@/pages/SalesReports"
 import ManagePurchaseReturn from "@/pages/ManagePurchaseReturn"
 import CreatePurchaseReturn from "@/pages/CreatePurchaseReturn"
 import ManageSalesInvoice from "@/pages/ManageSalesInvoice"
 import CreateSalesInvoice from "@/pages/CreateSalesInvoice"
+import ManageSalesReturn from "@/pages/ManageSalesReturn"
+import CreateSalesReturn from "@/pages/CreateSalesReturn"
 import Layout from "@/components/layout"
 import { useAppSelector } from "@/store/hooks"
 import { Toaster } from "@/components/ui/sonner"
@@ -162,6 +165,18 @@ export function App() {
                   <Route
                     path="sales-invoice/edit/:id"
                     element={<CreateSalesInvoice />}
+                  />
+                  <Route
+                    path="sales-return"
+                    element={<ManageSalesReturn />}
+                  />
+                  <Route
+                    path="sales-return/create"
+                    element={<CreateSalesReturn />}
+                  />
+                  <Route
+                    path="sales-reports"
+                    element={<SalesReports />}
                   />
                   <Route path="brand" element={<ManageBrand />} />
                   <Route path="manufacturer" element={<ManageManufacturer />} />

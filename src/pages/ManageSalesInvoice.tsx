@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
   Trash2, 
@@ -19,7 +19,9 @@ import {
   RefreshCw,
   Pencil,
   User,
-  Hash
+  Hash,
+  AlertCircle,
+  Printer
 } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -53,13 +55,25 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
+import { generateSalesInvoicePdf } from '@/utils/salesInvoicePdf';
+
 import type { SalesInvoiceDto } from '@/types/SalesInvoiceDto';
 import type { WarehouseDto } from '@/types/WarehouseDto';
 
 export default function ManageSalesInvoice() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { canView, canCreate, canDelete } = usePermissions('/sales-invoice');
   const user = useAppSelector((state) => state.auth.user);
+
+  useEffect(() => {
+    const stateVal = location.state as { autoViewInvoiceId?: string } | null;
+    if (stateVal?.autoViewInvoiceId) {
+      handleOpenView(stateVal.autoViewInvoiceId);
+      // Clear location state to prevent modal reopening on page refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   if (!canView) {
     return (
@@ -219,6 +233,41 @@ export default function ManageSalesInvoice() {
     }
   };
 
+  const handleDownloadPdf = async (invoice: SalesInvoiceDto) => {
+    let fullInvoice = invoice;
+    if (!invoice.items || invoice.items.length === 0) {
+      try {
+        const res: any = await axiosClient.get(`/SalesInvoice/${invoice.id}`);
+        if (res?.success && res.data) {
+          fullInvoice = res.data;
+        } else {
+          toast.error('Failed to load invoice items for PDF receipt.');
+          return;
+        }
+        
+      } catch (err) {
+        console.error('Failed to load full sales invoice details', err);
+        toast.error('Error loading invoice items for PDF receipt.');
+        return;
+      }
+    }
+
+    try {
+      let companyInfo = undefined;
+      const response: any = await axiosClient.get('/Company');
+      if (response?.success) {
+        const companies = response.data || [];
+        const warehouseObj = warehouses.find(w => w.id === fullInvoice.warehouseId);
+        const targetCompanyId = warehouseObj?.companyId || fullInvoice.companyId || user?.companyId;
+        companyInfo = companies.find((c: any) => c.id === targetCompanyId);
+      }
+      generateSalesInvoicePdf(fullInvoice, companyInfo);
+    } catch (e) {
+      console.error('Failed to fetch company details for PDF', e);
+      generateSalesInvoicePdf(fullInvoice);
+    }
+  };
+
   // Delete invoice
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this sales invoice?')) return;
@@ -319,7 +368,7 @@ export default function ManageSalesInvoice() {
 
     filteredInvoices.forEach(inv => {
       totalInvoices++;
-      if (inv.status === 2 || inv.status === 4) {
+      if (inv.status === 2 || inv.status === 4 || inv.status === 5 || inv.status === 6) {
         postedCount++;
         totalSalesValue += inv.netAmount;
       } else if (inv.status === 1) {
@@ -355,6 +404,18 @@ export default function ManageSalesInvoice() {
         return (
           <span className={`inline-flex items-center ${size} rounded-full font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/20 dark:text-indigo-400`}>
             <Wallet className={large ? 'h-4 w-4' : 'h-3 w-3'} /> Partially Paid
+          </span>
+        );
+      case 5:
+        return (
+          <span className={`inline-flex items-center ${size} rounded-full font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400`}>
+            <Ban className={large ? 'h-4 w-4' : 'h-3 w-3'} /> Returned
+          </span>
+        );
+      case 6:
+        return (
+          <span className={`inline-flex items-center ${size} rounded-full font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400`}>
+            <AlertCircle className={large ? 'h-4 w-4' : 'h-3 w-3'} /> Partially Returned
           </span>
         );
       default:
@@ -507,6 +568,8 @@ export default function ManageSalesInvoice() {
               <SelectItem value="2">Posted</SelectItem>
               <SelectItem value="3">Cancelled</SelectItem>
               <SelectItem value="4">Partially Paid</SelectItem>
+              <SelectItem value="5">Returned</SelectItem>
+              <SelectItem value="6">Partially Returned</SelectItem>
             </SelectContent>
           </Select>
 
@@ -593,8 +656,8 @@ export default function ManageSalesInvoice() {
                           <Eye className="h-4 w-4" />
                         </Button>
 
-                        {/* Record Payment — only for Posted/Partially Paid and not fully paid */}
-                        {(inv.status === 2 || inv.status === 4) && (inv.paidAmount || 0) < inv.netAmount && (
+                        {/* Record Payment — only for Posted/Partially Paid/Partially Returned and not fully paid */}
+                        {(inv.status === 2 || inv.status === 4 || inv.status === 6) && (inv.paidAmount || 0) < inv.netAmount && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -631,8 +694,8 @@ export default function ManageSalesInvoice() {
                           </Button>
                         )}
 
-                        {/* Cancel */}
-                        {canDelete && inv.status !== 3 && (
+                        {/* Cancel — not for Cancelled or Fully Returned */}
+                        {canDelete && inv.status !== 3 && inv.status !== 5 && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -643,6 +706,17 @@ export default function ManageSalesInvoice() {
                             <Ban className="h-4.5 w-4.5" />
                           </Button>
                         )}
+                        
+                        {/* Download PDF Invoice */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-zinc-50 hover:text-zinc-650 dark:hover:bg-zinc-950/20 dark:hover:text-zinc-400"
+                          onClick={() => handleDownloadPdf(inv)}
+                          title="Download PDF Invoice"
+                        >
+                          <Printer className="h-4 w-4 text-violet-500" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -898,6 +972,16 @@ export default function ManageSalesInvoice() {
                   onClick={() => handleCancel(viewingInvoice.id!)}
                 >
                   <Ban className="h-4 w-4" /> Cancel Invoice (Rollback Stock)
+                </Button>
+              )}
+              {viewingInvoice && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex items-center gap-2 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-violet-600 dark:text-violet-400"
+                  onClick={() => handleDownloadPdf(viewingInvoice)}
+                >
+                  <Printer className="h-4 w-4 mr-1.5" /> Download PDF Receipt
                 </Button>
               )}
               <Button
