@@ -10,7 +10,8 @@ import {
   Coins,
   ArrowLeftRight,
   User,
-  Package
+  Package,
+  Search
 } from 'lucide-react';
 import { Page } from '@/components/ui/page';
 import { Section } from '@/components/ui/section';
@@ -31,6 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import axiosClient from '@/Services/axiosClient';
 import { toast } from 'sonner';
 
@@ -100,6 +107,22 @@ export default function CreatePurchaseReturn() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
   const [invoiceDetail, setInvoiceDetail] = useState<Invoice | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  // Purchase Invoice Selection Dialog states
+  const [selectingInvoice, setSelectingInvoice] = useState(false);
+  const [invoiceSearchText, setInvoiceSearchText] = useState('');
+
+  // Filter invoices client-side inside the search dialog
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      const term = invoiceSearchText.toLowerCase().trim();
+      if (!term) return true;
+      return (
+        inv.invoiceNo.toLowerCase().includes(term) ||
+        inv.supplierName.toLowerCase().includes(term)
+      );
+    });
+  }, [invoices, invoiceSearchText]);
 
   // Return Document Details
   const [returnNo, setReturnNo] = useState('');
@@ -357,22 +380,52 @@ export default function CreatePurchaseReturn() {
               {/* Select Purchase Invoice */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-zinc-500">Select Purchase Invoice</label>
-                <Select 
-                  value={selectedInvoiceId} 
-                  onValueChange={handleInvoiceChange} 
-                  disabled={isLoadingInvoices}
-                >
-                  <SelectTrigger className="w-full h-10">
-                    <SelectValue placeholder={isLoadingInvoices ? "Loading Invoices..." : "Select Invoice"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {invoices.map((inv) => (
-                      <SelectItem key={inv.id} value={inv.id}>
-                        {inv.invoiceNo} ({inv.supplierName}) - ₹{inv.netAmount.toFixed(2)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {invoiceDetail ? (
+                  <div className="flex items-center justify-between border border-border bg-card rounded-md p-3">
+                    <div className="min-w-0 flex-1 pr-2">
+                      <span className="font-bold text-sm text-foreground block font-mono truncate">
+                        {invoiceDetail.invoiceNo}
+                      </span>
+                      <span className="text-xs text-muted-foreground block truncate">
+                        {invoiceDetail.supplierName} • ₹{invoiceDetail.netAmount.toFixed(2)}
+                      </span>
+                    </div>
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setInvoiceSearchText('');
+                        setSelectingInvoice(true);
+                      }} 
+                      className="text-xs shrink-0 h-8 gap-1.5"
+                    >
+                      <Search className="h-3.5 w-3.5" /> Change
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    onClick={() => {
+                      setInvoiceSearchText('');
+                      setSelectingInvoice(true);
+                    }}
+                    className="w-full justify-start text-muted-foreground font-normal border-dashed border-2 hover:border-indigo-400 h-10"
+                    disabled={isLoadingInvoices}
+                  >
+                    {isLoadingInvoices ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading Invoices...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="mr-2 h-4 w-4" /> Select Invoice...
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
 
               {/* Return Number */}
@@ -561,6 +614,60 @@ export default function CreatePurchaseReturn() {
         </div>
 
       </div>
+
+      {/* Searchable Purchase Invoice Dialog */}
+      <Dialog open={selectingInvoice} onOpenChange={setSelectingInvoice}>
+        <DialogContent className="max-w-md bg-popover border border-border">
+          <DialogHeader>
+            <DialogTitle>Search Purchase Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-muted-foreground" />
+            <Input
+              placeholder="Search by invoice no or supplier name..."
+              value={invoiceSearchText}
+              onChange={(e) => setInvoiceSearchText(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <div className="max-h-[300px] overflow-y-auto mt-4 divide-y divide-border">
+            {isLoadingInvoices ? (
+              <div className="flex flex-col items-center justify-center py-10 gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Loading invoices...</span>
+              </div>
+            ) : (
+              filteredInvoices.map((inv) => (
+                <div 
+                  key={inv.id}
+                  onClick={() => {
+                    handleInvoiceChange(inv.id);
+                    setSelectingInvoice(false);
+                  }}
+                  className={`p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer flex justify-between items-center transition-colors ${selectedInvoiceId === inv.id ? 'bg-accent text-accent-foreground' : ''}`}
+                >
+                  <div className="min-w-0 flex-1 pr-3">
+                    <div className="font-bold text-sm font-mono text-zinc-900 dark:text-zinc-100 truncate">{inv.invoiceNo}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">{inv.supplierName}</div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">
+                      Date: {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-mono text-sm font-bold text-indigo-600 dark:text-indigo-400">₹{inv.netAmount.toFixed(2)}</span>
+                    <span className="block text-[10px] text-muted-foreground">{inv.warehouseName}</span>
+                  </div>
+                </div>
+              ))
+            )}
+            {!isLoadingInvoices && filteredInvoices.length === 0 && (
+              <div className="text-center py-6 text-muted-foreground">
+                No matching invoices found.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Page>
   );
 }

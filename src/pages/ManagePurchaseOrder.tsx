@@ -105,6 +105,8 @@ export default function ManagePurchaseOrder() {
   // Product Selection Modal
   const [selectingProductForIndex, setSelectingProductForIndex] = useState<number | null>(null);
   const [productSearchText, setProductSearchText] = useState('');
+  const [lookupProducts, setLookupProducts] = useState<ProductDto[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
 
   const fetchOrders = async () => {
     if (!user?.companyId) return;
@@ -129,7 +131,7 @@ export default function ManagePurchaseOrder() {
       const [resWh, resSup, resProd] = await Promise.all([
         axiosClient.get('/Warehouse', { params: { pageNumber: 1, pageSize: 10000 } }),
         axiosClient.get('/Supplier', { params: { pageNumber: 1, pageSize: 10000 } }),
-        axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 10000 } })
+        axiosClient.get('/Product', { params: { pageNumber: 1, pageSize: 30 } })
       ]) as any[];
 
       if (resWh?.success) {
@@ -143,7 +145,9 @@ export default function ManagePurchaseOrder() {
         setSuppliers(resSup.data?.items || resSup.data || []);
       }
       if (resProd?.success) {
-        setProducts(resProd.data?.items || resProd.data || []);
+        const initialProds = resProd.data?.items || resProd.data || [];
+        setProducts(initialProds);
+        setLookupProducts(initialProds);
       }
     } catch (e) {
       console.error('Failed to load dependencies', e);
@@ -190,6 +194,35 @@ export default function ManagePurchaseOrder() {
       fetchLowStock(selectedWarehouseId);
     }
   }, [selectedWarehouseId, isCreating]);
+
+  useEffect(() => {
+    if (selectingProductForIndex !== null) {
+      setProductSearchText("");
+    }
+  }, [selectingProductForIndex]);
+
+  // Debounced search for product selection dialog
+  useEffect(() => {
+    if (selectingProductForIndex === null) return;
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingProducts(true);
+      try {
+        const res: any = await axiosClient.get("/Product", {
+          params: { pageNumber: 1, pageSize: 30, search: productSearchText }
+        });
+        if (res?.success) {
+          setLookupProducts(res.data?.items || res.data || []);
+        }
+      } catch (e) {
+        console.error("Failed to search products", e);
+      } finally {
+        setIsSearchingProducts(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [productSearchText, selectingProductForIndex]);
 
   // Client-side filtering of PO list
   const filteredOrders = useMemo(() => {
@@ -292,6 +325,10 @@ export default function ManagePurchaseOrder() {
       rate: product.purchaseRate || 0,
       amount: (updated[index].orderedQty || 1) * (product.purchaseRate || 0)
     };
+    setProducts((prev) => {
+      if (prev.some((item) => item.id === product.id)) return prev;
+      return [...prev, product];
+    });
     setFormItems(updated);
     setSelectingProductForIndex(null);
   };
@@ -599,17 +636,7 @@ Thank you!`);
     }
   };
 
-  // Filtered Products for Autocomplete
-  const dialogFilteredProducts = useMemo(() => {
-    if (!productSearchText.trim()) return products;
-    const lower = productSearchText.toLowerCase();
-    return products.filter(
-      p => 
-        p.name.toLowerCase().includes(lower) || 
-        p.productCode.toLowerCase().includes(lower) ||
-        (p.sku && p.sku.toLowerCase().includes(lower))
-    );
-  }, [products, productSearchText]);
+
 
   if (!canView) {
     return (
@@ -909,23 +936,30 @@ Thank you!`);
               />
             </div>
             <div className="max-h-[300px] overflow-y-auto mt-4 divide-y divide-border">
-              {dialogFilteredProducts.map((p) => (
-                <div 
-                  key={p.id}
-                  onClick={() => handleProductSelect(selectingProductForIndex!, p)}
-                  className="p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer flex justify-between items-center transition-colors"
-                >
-                  <div>
-                    <div className="font-semibold text-sm">{p.name}</div>
-                    <div className="text-xs text-muted-foreground font-mono mt-0.5">{p.productCode}</div>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-mono text-sm font-semibold">₹{p.purchaseRate?.toFixed(2)}</span>
-                    <span className="block text-[10px] text-zinc-400">Stock: {p.liveStock || 0}</span>
-                  </div>
+              {isSearchingProducts ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Searching products...</span>
                 </div>
-              ))}
-              {dialogFilteredProducts.length === 0 && (
+              ) : (
+                lookupProducts.map((p) => (
+                  <div 
+                    key={p.id}
+                    onClick={() => handleProductSelect(selectingProductForIndex!, p)}
+                    className="p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer flex justify-between items-center transition-colors"
+                  >
+                    <div>
+                      <div className="font-semibold text-sm">{p.name}</div>
+                      <div className="text-xs text-muted-foreground font-mono mt-0.5">{p.productCode}</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-sm font-semibold">₹{p.purchaseRate?.toFixed(2)}</span>
+                      <span className="block text-[10px] text-zinc-400">Stock: {p.liveStock || 0}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+              {!isSearchingProducts && lookupProducts.length === 0 && (
                 <div className="text-center py-6 text-muted-foreground">
                   No products found.
                 </div>

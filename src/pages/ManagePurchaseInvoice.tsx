@@ -608,18 +608,17 @@ export default function ManagePurchaseInvoice() {
                           </Button>
                         )}
 
-                        {/* Edit — only for Drafts */}
-                        {inv.status === 1 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/20 dark:hover:text-blue-400"
-                            onClick={() => navigate(`/purchase-invoice/edit/${inv.id}`)}
-                            title="Edit Draft Invoice"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
+                        {/* Edit — always visible, disabled for non-Drafts */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/20 dark:hover:text-blue-400 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-current"
+                          onClick={() => navigate(`/purchase-invoice/edit/${inv.id}`)}
+                          disabled={inv.status !== 1}
+                          title={inv.status === 1 ? "Edit Draft Invoice" : "Only Draft invoices can be edited"}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
 
                         {/* Delete */}
                         {canDelete && (

@@ -152,6 +152,8 @@ export default function CreatePurchaseInvoice() {
     number | null
   >(null)
   const [dialogSearch, setDialogSearch] = useState("")
+  const [lookupProducts, setLookupProducts] = useState<ProductDto[]>([])
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false)
 
   // Excel import state
   const [isUploading, setIsUploading] = useState(false)
@@ -223,17 +225,7 @@ export default function CreatePurchaseInvoice() {
 
   // Keep previewCurrentPaidAmount in sync with previewRemainingPayable - Removed auto-sync to allow defaulting to unpaid (₹0)
 
-  const dialogFilteredProducts = useMemo(() => {
-    if (!dialogSearch.trim()) return products
-    const lower = dialogSearch.toLowerCase()
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(lower) ||
-        p.productCode.toLowerCase().includes(lower) ||
-        (p.sku && p.sku.toLowerCase().includes(lower)) ||
-        (p.barcode && p.barcode.toLowerCase().includes(lower))
-    )
-  }, [products, dialogSearch])
+
 
   const filteredWarehouses = useMemo(() => {
     if (user?.warehouseId) {
@@ -247,6 +239,29 @@ export default function CreatePurchaseInvoice() {
       setDialogSearch("")
     }
   }, [selectingProductForIndex])
+
+  // Debounced search for product selection dialog
+  useEffect(() => {
+    if (selectingProductForIndex === null) return
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsSearchingProducts(true)
+      try {
+        const res: any = await axiosClient.get("/Product", {
+          params: { pageNumber: 1, pageSize: 30, search: dialogSearch }
+        })
+        if (res?.success) {
+          setLookupProducts(res.data?.items || res.data || [])
+        }
+      } catch (e) {
+        console.error("Failed to search products", e)
+      } finally {
+        setIsSearchingProducts(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [dialogSearch, selectingProductForIndex])
 
   // load dependencies
   useEffect(() => {
@@ -262,7 +277,7 @@ export default function CreatePurchaseInvoice() {
               params: { pageNumber: 1, pageSize: 10000 },
             }),
             axiosClient.get("/Product", {
-              params: { pageNumber: 1, pageSize: 10000 },
+              params: { pageNumber: 1, pageSize: 30 },
             }),
             axiosClient.get("/ProductVariant"),
             axiosClient.get("/ProductBatch"),
@@ -282,8 +297,11 @@ export default function CreatePurchaseInvoice() {
             setWarehouseId(whData[0].id || "")
           }
         }
-        if (resProd?.success)
-          setProducts(resProd.data?.items || resProd.data || [])
+        if (resProd?.success) {
+          const initialProds = resProd.data?.items || resProd.data || []
+          setProducts(initialProds)
+          setLookupProducts(initialProds)
+        }
         if (resVar?.success) setAllVariants(resVar.data || [])
         if (resBatch?.success) setAllBatches(resBatch.data || [])
         if (resTax?.success)
@@ -339,6 +357,8 @@ export default function CreatePurchaseInvoice() {
               inv.items.map((item: any) => ({
                 id: item.id,
                 productId: item.productId || "",
+                productName: item.productName || "",
+                productCode: item.productCode || "",
                 productVariantId: item.productVariantId || "",
                 productBatchId: item.productBatchId || "",
                 batchNumber: item.batchNumber || "",
@@ -357,6 +377,30 @@ export default function CreatePurchaseInvoice() {
                 totalAmount: item.totalAmount || 0,
               }))
             )
+
+            // Resolve details for products already present in the invoice
+            const uniqueProductCodes = Array.from(
+              new Set(inv.items.map((item: any) => item.productCode).filter(Boolean))
+            ) as string[]
+
+            if (uniqueProductCodes.length > 0) {
+              const fetchedProds = await Promise.all(
+                uniqueProductCodes.map((code) =>
+                  axiosClient
+                    .get("/Product", { params: { pageNumber: 1, pageSize: 1, search: code } })
+                    .then((res: any) =>
+                      res?.success && res.data?.items?.[0] ? res.data.items[0] : null
+                    )
+                    .catch(() => null)
+                )
+              )
+              const validFetchedProds = fetchedProds.filter(Boolean) as ProductDto[]
+              setProducts((prev) => {
+                const prevMap = new Map(prev.map((p) => [p.id, p]))
+                validFetchedProds.forEach((p) => prevMap.set(p.id, p))
+                return Array.from(prevMap.values())
+              })
+            }
           }
           // Restore flat discount: existing discountAmount minus sum of line discounts
           const lineDiscountsSum = (inv.items || []).reduce(
@@ -877,7 +921,7 @@ export default function CreatePurchaseInvoice() {
             setUploadProgress(100)
             setTimeout(() => {
               setIsUploading(false)
-              processImportedData(validRows)
+              resolveAndProcessImportedData(validRows)
             }, 200)
           }, 100)
         }, 50)
@@ -1057,6 +1101,49 @@ export default function CreatePurchaseInvoice() {
       header: validatedHeader,
       items: validatedItems,
       isValid: isAllValid,
+    }
+  }
+
+  const resolveAndProcessImportedData = async (validRows: any[]) => {
+    setIsUploading(true)
+    setUploadProgress(95)
+    try {
+      const searchTerms = Array.from(
+        new Set(
+          validRows
+            .map((row) => getRowValue(row, ["product", "code", "barcode", "sku"]))
+            .filter(Boolean)
+            .map((term) => String(term).trim())
+        )
+      ) as string[]
+
+      if (searchTerms.length > 0) {
+        const fetchedResults = await Promise.all(
+          searchTerms.map((term) =>
+            axiosClient
+              .get("/Product", { params: { pageNumber: 1, pageSize: 5, search: term } })
+              .then((res: any) => (res?.success ? res.data?.items || res.data || [] : []))
+              .catch(() => [])
+          )
+        )
+
+        const allFetchedProducts = fetchedResults.flat() as ProductDto[]
+
+        setProducts((prev) => {
+          const prevMap = new Map(prev.map((p) => [p.id, p]))
+          allFetchedProducts.forEach((p) => {
+            if (p && p.id) prevMap.set(p.id, p)
+          })
+          return Array.from(prevMap.values())
+        })
+      }
+
+      processImportedData(validRows)
+    } catch (err) {
+      console.error("Failed to resolve products for import", err)
+      toast.error("Failed to resolve product catalog matches for import.")
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -1875,6 +1962,15 @@ export default function CreatePurchaseInvoice() {
                                           : ""}
                                       </div>
                                     </div>
+                                  ) : item.productId ? (
+                                    <div className="truncate pr-1">
+                                      <div className="truncate font-medium">
+                                        {item.productName || "Product Loaded"}
+                                      </div>
+                                      <div className="mt-0.5 truncate font-mono text-[9px] leading-none text-zinc-400">
+                                        {item.productCode || ""}
+                                      </div>
+                                    </div>
                                   ) : (
                                     <span className="text-zinc-400 dark:text-zinc-500">
                                       Select Product...
@@ -2403,44 +2499,58 @@ export default function CreatePurchaseInvoice() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-900">
-                {dialogFilteredProducts.map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => {
-                      if (selectingProductForIndex !== null) {
-                        handleProductChange(
-                          selectingProductForIndex,
-                          p.id || ""
-                        )
-                        setSelectingProductForIndex(null)
-                      }
-                    }}
-                    className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900/60"
-                  >
-                    <td className="p-2.5 pl-3">
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-50">
-                        {p.name}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-zinc-400">
-                        <span>Code: {p.productCode}</span>
-                        {p.sku && <span>• SKU: {p.sku}</span>}
-                        {p.unitName && (
-                          <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-sans font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                            Unit: {p.unitName}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="dark:text-zinc-350 p-2.5 text-right font-mono text-zinc-700">
-                      ₹{p.purchaseRate?.toFixed(2) || "0.00"}
-                    </td>
-                    <td className="p-2.5 pr-3 text-right font-mono text-zinc-400">
-                      ₹{p.mrp?.toFixed(2) || "0.00"}
+                {isSearchingProducts ? (
+                  <tr>
+                    <td colSpan={3} className="p-6 text-center text-zinc-400">
+                      <Loader2 className="mx-auto h-5 w-5 animate-spin mb-1 text-muted-foreground" />
+                      Searching products...
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  lookupProducts.map((p) => (
+                    <tr
+                      key={p.id}
+                      onClick={() => {
+                        if (selectingProductForIndex !== null) {
+                          // Merge into master products list so main table can resolve details
+                          setProducts((prev) => {
+                            if (prev.some((item) => item.id === p.id)) return prev;
+                            return [...prev, p];
+                          });
+                          handleProductChange(
+                            selectingProductForIndex,
+                            p.id || ""
+                          )
+                          setSelectingProductForIndex(null)
+                        }
+                      }}
+                      className="cursor-pointer transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900/60"
+                    >
+                      <td className="p-2.5 pl-3">
+                        <div className="font-semibold text-zinc-900 dark:text-zinc-50">
+                          {p.name}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-zinc-400">
+                          <span>Code: {p.productCode}</span>
+                          {p.sku && <span>• SKU: {p.sku}</span>}
+                          {p.unitName && (
+                            <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-sans font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                              Unit: {p.unitName}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="dark:text-zinc-350 p-2.5 text-right font-mono text-zinc-700">
+                        ₹{p.purchaseRate?.toFixed(2) || "0.00"}
+                      </td>
+                      <td className="p-2.5 pr-3 text-right font-mono text-zinc-400">
+                        ₹{p.mrp?.toFixed(2) || "0.00"}
+                      </td>
+                    </tr>
+                  ))
+                )}
 
-                {dialogFilteredProducts.length === 0 && (
+                {!isSearchingProducts && lookupProducts.length === 0 && (
                   <tr>
                     <td colSpan={3} className="p-6 text-center text-zinc-400">
                       No products match your search.
