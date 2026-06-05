@@ -19,4 +19,8 @@ export interface PurchaseInvoiceItemDto {
   taxPercent?: number;
   taxAmount?: number;
   totalAmount?: number;
+  unitId?: string;
+  unitName?: string;
+  unitSymbol?: string;
+  conversionFactor?: number;
 }

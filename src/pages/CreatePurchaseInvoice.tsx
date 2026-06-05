@@ -85,6 +85,10 @@ interface PreviewItem {
   salesRate: number
   discountPercent: number
   taxPercent: number
+  unitId?: string
+  unitName?: string
+  unitSymbol?: string
+  conversionFactor?: number
   errors: {
     product?: string
     quantity?: string
@@ -124,12 +128,16 @@ export default function CreatePurchaseInvoice() {
   const [allVariants, setAllVariants] = useState<ProductVariantDto[]>([])
   const [allBatches, setAllBatches] = useState<ProductBatchDto[]>([])
   const [taxProfiles, setTaxProfiles] = useState<GstDto[]>([])
+  const [units, setUnits] = useState<any[]>([])
 
   const [isLoadingDeps, setIsLoadingDeps] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   // invoice master form state
   const [supplierId, setSupplierId] = useState("")
+  const [supplierSearchText, setSupplierSearchText] = useState("")
+  const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false)
+  const [activeSupplierSearchIndex, setActiveSupplierSearchIndex] = useState(-1)
   const [warehouseId, setWarehouseId] = useState("")
   const [invoiceNo, setInvoiceNo] = useState("")
   const [referenceNo, setReferenceNo] = useState("")
@@ -146,6 +154,12 @@ export default function CreatePurchaseInvoice() {
 
   // invoice details items state
   const [items, setItems] = useState<PurchaseInvoiceItemDto[]>([])
+
+  // Quick product search state
+  const [quickSearchText, setQuickSearchText] = useState("")
+  const [quickSearchResults, setQuickSearchResults] = useState<ProductDto[]>([])
+  const [isQuickSearching, setIsQuickSearching] = useState(false)
+  const [activeQuickSearchIndex, setActiveQuickSearchIndex] = useState(-1)
 
   // dialog product selection state
   const [selectingProductForIndex, setSelectingProductForIndex] = useState<
@@ -227,12 +241,103 @@ export default function CreatePurchaseInvoice() {
 
 
 
+  const filteredSuppliers = useMemo(() => {
+    if (!supplierSearchText.trim()) return suppliers
+    return suppliers.filter(
+      (s) =>
+        s.name.toLowerCase().includes(supplierSearchText.toLowerCase()) ||
+        (s.phone && s.phone.includes(supplierSearchText))
+    )
+  }, [suppliers, supplierSearchText])
+
   const filteredWarehouses = useMemo(() => {
     if (user?.warehouseId) {
       return warehouses.filter((w) => w.id === user.warehouseId)
     }
     return warehouses
   }, [warehouses, user?.warehouseId])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const container = document.getElementById("supplier-select-container")
+      if (container && !container.contains(event.target as Node)) {
+        setIsSupplierDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    setActiveSupplierSearchIndex(filteredSuppliers.length > 0 ? 0 : -1)
+  }, [filteredSuppliers, isSupplierDropdownOpen])
+
+  useEffect(() => {
+    if (activeSupplierSearchIndex >= 0 && isSupplierDropdownOpen) {
+      const container = document.querySelector("#supplier-select-container .overflow-y-auto")
+      const activeEl = container?.children[activeSupplierSearchIndex] as HTMLElement
+      if (activeEl && container) {
+        const containerTop = container.scrollTop
+        const containerBottom = containerTop + container.clientHeight
+        const elemTop = activeEl.offsetTop
+        const elemBottom = elemTop + activeEl.clientHeight
+
+        if (elemTop < containerTop) {
+          container.scrollTop = elemTop
+        } else if (elemBottom > containerBottom) {
+          container.scrollTop = elemBottom - container.clientHeight
+        }
+      }
+    }
+  }, [activeSupplierSearchIndex, isSupplierDropdownOpen])
+
+  useEffect(() => {
+    if (activeQuickSearchIndex >= 0 && quickSearchResults.length > 0) {
+      const container = document.querySelector("#product-quick-search-container .overflow-y-auto")
+      const activeEl = container?.children[activeQuickSearchIndex] as HTMLElement
+      if (activeEl && container) {
+        const containerTop = container.scrollTop
+        const containerBottom = containerTop + container.clientHeight
+        const elemTop = activeEl.offsetTop
+        const elemBottom = elemTop + activeEl.clientHeight
+
+        if (elemTop < containerTop) {
+          container.scrollTop = elemTop
+        } else if (elemBottom > containerBottom) {
+          container.scrollTop = elemBottom - container.clientHeight
+        }
+      }
+    }
+  }, [activeQuickSearchIndex, quickSearchResults])
+
+  const handleSupplierSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isSupplierDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        setIsSupplierDropdownOpen(true)
+      }
+      return
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveSupplierSearchIndex((prev) =>
+        prev < filteredSuppliers.length - 1 ? prev + 1 : prev
+      )
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveSupplierSearchIndex((prev) => (prev > 0 ? prev - 1 : 0))
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      if (activeSupplierSearchIndex >= 0 && activeSupplierSearchIndex < filteredSuppliers.length) {
+        const s = filteredSuppliers[activeSupplierSearchIndex]
+        setSupplierId(s.id || "")
+        setSupplierSearchText(s.name)
+        setIsSupplierDropdownOpen(false)
+      }
+    } else if (e.key === "Escape") {
+      setIsSupplierDropdownOpen(false)
+    }
+  }
 
   useEffect(() => {
     if (selectingProductForIndex !== null) {
@@ -268,7 +373,7 @@ export default function CreatePurchaseInvoice() {
     const fetchDeps = async () => {
       setIsLoadingDeps(true)
       try {
-        const [resSup, resWh, resProd, resVar, resBatch, resTax] =
+        const [resSup, resWh, resProd, resVar, resBatch, resTax, resUnit] =
           (await Promise.all([
             axiosClient.get("/Supplier", {
               params: { pageNumber: 1, pageSize: 10000 },
@@ -282,6 +387,9 @@ export default function CreatePurchaseInvoice() {
             axiosClient.get("/ProductVariant"),
             axiosClient.get("/ProductBatch"),
             axiosClient.get("/TaxProfile", {
+              params: { pageNumber: 1, pageSize: 10000 },
+            }),
+            axiosClient.get("/Unit", {
               params: { pageNumber: 1, pageSize: 10000 },
             }),
           ])) as any[]
@@ -306,6 +414,8 @@ export default function CreatePurchaseInvoice() {
         if (resBatch?.success) setAllBatches(resBatch.data || [])
         if (resTax?.success)
           setTaxProfiles(resTax.data?.items || resTax.data || [])
+        if (resUnit?.success)
+          setUnits(resUnit.data?.items || resUnit.data || [])
       } catch (e) {
         console.error("Failed to load dependencies", e)
         toast.error("Failed to load dependecy lists.")
@@ -484,9 +594,53 @@ export default function CreatePurchaseInvoice() {
       freeQuantity: 0,
       discountPercent: 0,
       discountAmount: 0,
+      unitId: product.unitId || "",
+      unitName: product.unitName || "",
+      conversionFactor: 1.0,
     }
 
     // Calculate line totals
+    calculateLineTotals(updated, index)
+  }
+
+  // handle unit change
+  const handleUnitChange = (index: number, unitId: string) => {
+    const updated = [...items]
+    const item = updated[index]
+    const product = products.find(p => p.id === item.productId)
+    if (!product) return
+
+    let conversionFactor = 1.0
+    let purchaseRate = product.purchaseRate || 0
+    let salesRate = product.salesRate || 0
+    let mrp = product.mrp || 0
+
+    if (unitId === product.unitId) {
+      conversionFactor = 1.0
+      purchaseRate = product.purchaseRate || 0
+      salesRate = product.salesRate || 0
+      mrp = product.mrp || 0
+    } else {
+      const rule = product.alternativeUnits?.find(c => c.alternativeUnitId === unitId)
+      if (rule) {
+        conversionFactor = rule.conversionFactor
+        purchaseRate = rule.purchaseRate !== undefined && rule.purchaseRate !== null ? rule.purchaseRate : (product.purchaseRate || 0) * conversionFactor
+        salesRate = rule.salesRate !== undefined && rule.salesRate !== null ? rule.salesRate : (product.salesRate || 0) * conversionFactor
+        mrp = rule.mrp !== undefined && rule.mrp !== null ? rule.mrp : (product.mrp || 0) * conversionFactor
+      }
+    }
+
+    updated[index] = {
+      ...item,
+      unitId: unitId,
+      unitName: units.find(u => u.id === unitId)?.name || "",
+      unitSymbol: units.find(u => u.id === unitId)?.symbol || "",
+      conversionFactor: conversionFactor,
+      purchaseRate: purchaseRate,
+      salesRate: salesRate,
+      mrp: mrp
+    }
+
     calculateLineTotals(updated, index)
   }
 
@@ -546,6 +700,110 @@ export default function CreatePurchaseInvoice() {
     }
 
     setItems(list)
+  }
+
+  // Quick search and select product logic
+  useEffect(() => {
+    if (!quickSearchText.trim()) {
+      setQuickSearchResults([])
+      return
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsQuickSearching(true)
+      try {
+        const res: any = await axiosClient.get("/Product", {
+          params: { pageNumber: 1, pageSize: 10, search: quickSearchText }
+        })
+        if (res?.success) {
+          const found = res.data?.items || res.data || []
+          setQuickSearchResults(found)
+          setActiveQuickSearchIndex(found.length > 0 ? 0 : -1)
+
+          // Auto-select exact match for barcode scanner
+          const exactMatch = found.find(
+            (p: any) =>
+              (p.barcode && p.barcode.toLowerCase() === quickSearchText.trim().toLowerCase()) ||
+              (p.productCode && p.productCode.toLowerCase() === quickSearchText.trim().toLowerCase())
+          )
+          if (exactMatch) {
+            handleSelectQuickAddProduct(exactMatch)
+          }
+        }
+      } catch (e) {
+        console.error("Quick search failed", e)
+      } finally {
+        setIsQuickSearching(false)
+      }
+    }, 200)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [quickSearchText])
+
+  const handleQuickSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveQuickSearchIndex((prev) =>
+        prev < quickSearchResults.length - 1 ? prev + 1 : prev
+      )
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveQuickSearchIndex((prev) => (prev > 0 ? prev - 1 : 0))
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      if (activeQuickSearchIndex >= 0 && activeQuickSearchIndex < quickSearchResults.length) {
+        handleSelectQuickAddProduct(quickSearchResults[activeQuickSearchIndex])
+      }
+    } else if (e.key === "Escape") {
+      setQuickSearchResults([])
+    }
+  }
+
+  const handleSelectQuickAddProduct = (product: ProductDto) => {
+    setProducts((prev) => {
+      if (prev.some((item) => item.id === product.id)) return prev
+      return [...prev, product]
+    })
+
+    let defaultTaxRate = 0
+    if (product.taxProfileId) {
+      const taxProfile = taxProfiles.find((tp) => tp.id === product.taxProfileId)
+      if (taxProfile) defaultTaxRate = taxProfile.igst
+    }
+
+    const newItem: PurchaseInvoiceItemDto = {
+      productId: product.id || "",
+      productName: product.name || "",
+      productCode: product.productCode || "",
+      quantity: 1,
+      freeQuantity: 0,
+      purchaseRate: product.purchaseRate || 0,
+      salesRate: product.salesRate || 0,
+      mrp: product.mrp || 0,
+      taxPercent: defaultTaxRate,
+      discountPercent: 0,
+      discountAmount: 0,
+      unitId: product.unitId || "",
+      unitName: product.unitName || "",
+      conversionFactor: 1.0,
+    }
+
+    const updatedItems = [...items, newItem]
+    setItems(updatedItems)
+    calculateLineTotals(updatedItems, updatedItems.length - 1)
+
+    setQuickSearchText("")
+    setQuickSearchResults([])
+    setActiveQuickSearchIndex(-1)
+
+    const newIndex = updatedItems.length - 1
+    setTimeout(() => {
+      const element = document.getElementById(`qty-input-${newIndex}`)
+      if (element) {
+        ;(element as HTMLInputElement).focus()
+        ;(element as HTMLInputElement).select()
+      }
+    }, 100)
   }
 
   // global summaries
@@ -694,6 +952,8 @@ export default function CreatePurchaseInvoice() {
           taxPercent: Number(i.taxPercent) || 0,
           taxAmount: Number(i.taxAmount) || 0,
           totalAmount: Number(i.totalAmount) || 0,
+          unitId: i.unitId || undefined,
+          conversionFactor: i.conversionFactor || 1.0,
         })),
       }
 
@@ -775,6 +1035,7 @@ export default function CreatePurchaseInvoice() {
         "Product Code / SKU / Barcode": sampleProductCode,
         "Variant Name": "",
         "Batch No": "BATCH-001",
+        "Unit": products[0]?.unitName || "Piece",
         Quantity: 10,
         "Free Quantity": 1,
         "Purchase Rate": products[0]?.purchaseRate || 100,
@@ -796,6 +1057,7 @@ export default function CreatePurchaseInvoice() {
         "Product Code / SKU / Barcode": products[1]?.productCode || "PROD-002",
         "Variant Name": "",
         "Batch No": "BATCH-001",
+        "Unit": products[1]?.unitName || "Piece",
         Quantity: 5,
         "Free Quantity": 0,
         "Purchase Rate": products[1]?.purchaseRate || 200,
@@ -822,6 +1084,7 @@ export default function CreatePurchaseInvoice() {
       { wch: 25 }, // Product Code / SKU / Barcode
       { wch: 15 }, // Variant Name
       { wch: 12 }, // Batch No
+      { wch: 12 }, // Unit
       { wch: 8 }, // Quantity
       { wch: 10 }, // Free Quantity
       { wch: 12 }, // Purchase Rate
@@ -1117,6 +1380,8 @@ export default function CreatePurchaseInvoice() {
         )
       ) as string[]
 
+      let updatedProducts = [...products]
+
       if (searchTerms.length > 0) {
         const fetchedResults = await Promise.all(
           searchTerms.map((term) =>
@@ -1129,16 +1394,15 @@ export default function CreatePurchaseInvoice() {
 
         const allFetchedProducts = fetchedResults.flat() as ProductDto[]
 
-        setProducts((prev) => {
-          const prevMap = new Map(prev.map((p) => [p.id, p]))
-          allFetchedProducts.forEach((p) => {
-            if (p && p.id) prevMap.set(p.id, p)
-          })
-          return Array.from(prevMap.values())
+        const prevMap = new Map(products.map((p) => [p.id, p]))
+        allFetchedProducts.forEach((p) => {
+          if (p && p.id) prevMap.set(p.id, p)
         })
+        updatedProducts = Array.from(prevMap.values())
+        setProducts(updatedProducts)
       }
 
-      processImportedData(validRows)
+      processImportedData(validRows, updatedProducts)
     } catch (err) {
       console.error("Failed to resolve products for import", err)
       toast.error("Failed to resolve product catalog matches for import.")
@@ -1147,7 +1411,8 @@ export default function CreatePurchaseInvoice() {
     }
   }
 
-  const processImportedData = (rows: any[]) => {
+  const processImportedData = (rows: any[], currentProductsList?: ProductDto[]) => {
+    const activeProducts = currentProductsList || products
     const firstRow = rows[0]
 
     const supplierSearch = String(
@@ -1191,17 +1456,20 @@ export default function CreatePurchaseInvoice() {
       errors: {},
     }
 
-    const parsedItems: PreviewItem[] = rows.map((row, idx) => {
+        const parsedItems: PreviewItem[] = rows.map((row, idx) => {
       const productSearch = String(
         getRowValue(row, ["product", "code", "barcode", "sku"]) || ""
       ).trim()
       const variantSearch = String(getRowValue(row, ["variant"]) || "").trim()
       const batchSearch = String(getRowValue(row, ["batch"]) || "").trim()
+      const unitSearch = String(
+        getRowValue(row, ["unit", "uom", "packaging"]) || ""
+      ).trim()
 
       const quantity = Number(getRowValue(row, ["qty", "quantity"])) || 1
       const freeQuantity = Number(getRowValue(row, ["free"])) || 0
 
-      const matchedProduct = products.find(
+      const matchedProduct = activeProducts.find(
         (p) =>
           (p.productCode &&
             p.productCode.toLowerCase() === productSearch.toLowerCase()) ||
@@ -1223,14 +1491,75 @@ export default function CreatePurchaseInvoice() {
       let discountPercent = Number(getRowValue(row, ["discount", "disc"])) || 0
       let taxPercent = Number(getRowValue(row, ["tax", "gst", "vat"])) || 0
 
+      let unitId = ""
+      let unitName = ""
+      let unitSymbol = ""
+      let conversionFactor = 1.0
+
       if (matchedProduct) {
         productId = matchedProduct.id || ""
         productName = matchedProduct.name || ""
         productCode = matchedProduct.productCode || ""
 
-        if (purchaseRate === 0) purchaseRate = matchedProduct.purchaseRate || 0
-        if (mrp === 0) mrp = matchedProduct.mrp || 0
-        if (salesRate === 0) salesRate = matchedProduct.salesRate || 0
+        let resolvedUnitId = matchedProduct.unitId || ""
+        let resolvedUnitName = matchedProduct.unitName || ""
+        let resolvedUnitSymbol = matchedProduct.unitSymbol || ""
+
+        if (unitSearch) {
+          if (
+            matchedProduct.unitName?.toLowerCase() === unitSearch.toLowerCase() ||
+            matchedProduct.unitSymbol?.toLowerCase() === unitSearch.toLowerCase()
+          ) {
+            resolvedUnitId = matchedProduct.unitId || ""
+            resolvedUnitName = matchedProduct.unitName || ""
+            resolvedUnitSymbol = matchedProduct.unitSymbol || ""
+            conversionFactor = 1.0
+          } else {
+            const rule = matchedProduct.alternativeUnits?.find(
+              (c) =>
+                c.alternativeUnitName?.toLowerCase() === unitSearch.toLowerCase() ||
+                c.alternativeUnitSymbol?.toLowerCase() === unitSearch.toLowerCase()
+            )
+            if (rule) {
+              resolvedUnitId = rule.alternativeUnitId
+              resolvedUnitName = rule.alternativeUnitName || ""
+              resolvedUnitSymbol = rule.alternativeUnitSymbol || ""
+              conversionFactor = rule.conversionFactor
+            }
+          }
+        }
+
+        unitId = resolvedUnitId
+        unitName = resolvedUnitName
+        unitSymbol = resolvedUnitSymbol
+
+        let basePurchaseRate = matchedProduct.purchaseRate || 0
+        let baseMrp = matchedProduct.mrp || 0
+        let baseSalesRate = matchedProduct.salesRate || 0
+
+        if (unitId && unitId !== matchedProduct.unitId) {
+          const rule = matchedProduct.alternativeUnits?.find(
+            (c) => c.alternativeUnitId === unitId
+          )
+          if (rule) {
+            basePurchaseRate =
+              rule.purchaseRate !== undefined && rule.purchaseRate !== null
+                ? rule.purchaseRate
+                : (matchedProduct.purchaseRate || 0) * conversionFactor
+            baseSalesRate =
+              rule.salesRate !== undefined && rule.salesRate !== null
+                ? rule.salesRate
+                : (matchedProduct.salesRate || 0) * conversionFactor
+            baseMrp =
+              rule.mrp !== undefined && rule.mrp !== null
+                ? rule.mrp
+                : (matchedProduct.mrp || 0) * conversionFactor
+          }
+        }
+
+        if (purchaseRate === 0) purchaseRate = basePurchaseRate
+        if (mrp === 0) mrp = baseMrp
+        if (salesRate === 0) salesRate = baseSalesRate
 
         if (taxPercent === 0 && matchedProduct.taxProfileId) {
           const taxProfile = taxProfiles.find(
@@ -1306,6 +1635,10 @@ export default function CreatePurchaseInvoice() {
         salesRate,
         discountPercent,
         taxPercent,
+        unitId,
+        unitName,
+        unitSymbol,
+        conversionFactor,
         errors: {},
       }
     })
@@ -1370,6 +1703,10 @@ export default function CreatePurchaseInvoice() {
           salesRate: prod.salesRate || 0,
           mrp: prod.mrp || 0,
           taxPercent: defaultTaxRate,
+          unitId: prod.unitId || "",
+          unitName: prod.unitName || "",
+          unitSymbol: prod.unitSymbol || "",
+          conversionFactor: 1.0,
         }
       } else {
         updatedItems[index] = {
@@ -1379,6 +1716,56 @@ export default function CreatePurchaseInvoice() {
           productCode: "",
           productVariantId: "",
           productBatchId: "",
+          unitId: "",
+          unitName: "",
+          unitSymbol: "",
+          conversionFactor: 1.0,
+        }
+      }
+    } else if (field === "unitId") {
+      const item = updatedItems[index]
+      const prod = products.find((p) => p.id === item.productId)
+      if (prod) {
+        let conversionFactor = 1.0
+        let purchaseRate = prod.purchaseRate || 0
+        let salesRate = prod.salesRate || 0
+        let mrp = prod.mrp || 0
+
+        if (value === prod.unitId) {
+          conversionFactor = 1.0
+          purchaseRate = prod.purchaseRate || 0
+          salesRate = prod.salesRate || 0
+          mrp = prod.mrp || 0
+        } else {
+          const rule = prod.alternativeUnits?.find(
+            (c) => c.alternativeUnitId === value
+          )
+          if (rule) {
+            conversionFactor = rule.conversionFactor
+            purchaseRate =
+              rule.purchaseRate !== undefined && rule.purchaseRate !== null
+                ? rule.purchaseRate
+                : (prod.purchaseRate || 0) * conversionFactor
+            salesRate =
+              rule.salesRate !== undefined && rule.salesRate !== null
+                ? rule.salesRate
+                : (prod.salesRate || 0) * conversionFactor
+            mrp =
+              rule.mrp !== undefined && rule.mrp !== null
+                ? rule.mrp
+                : (prod.mrp || 0) * conversionFactor
+          }
+        }
+
+        updatedItems[index] = {
+          ...item,
+          unitId: value,
+          unitName: units.find((u) => u.id === value)?.name || "",
+          unitSymbol: units.find((u) => u.id === value)?.symbol || "",
+          conversionFactor: conversionFactor,
+          purchaseRate: purchaseRate,
+          salesRate: salesRate,
+          mrp: mrp,
         }
       }
     } else if (field === "productVariantId") {
@@ -1452,6 +1839,10 @@ export default function CreatePurchaseInvoice() {
       salesRate: 0,
       discountPercent: 0,
       taxPercent: 0,
+      unitId: "",
+      unitName: "",
+      unitSymbol: "",
+      conversionFactor: 1.0,
       errors: {},
     }
     const updatedItems = [...previewItems, newItem]
@@ -1523,6 +1914,8 @@ export default function CreatePurchaseInvoice() {
           taxPercent: taxPct,
           taxAmount: taxAmount,
           totalAmount: totalAmount,
+          unitId: item.unitId || undefined,
+          conversionFactor: item.conversionFactor || 1.0,
         }
       })
 
@@ -1771,22 +2164,78 @@ export default function CreatePurchaseInvoice() {
 
           {/* Header Metadata Section */}
           <Section className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-card p-5 shadow-xs md:grid-cols-4">
-            <div className="space-y-1">
+            <div className="space-y-1" id="supplier-select-container">
               <label className="text-zinc-550 block text-xs font-semibold tracking-wider uppercase dark:text-zinc-400">
                 Supplier
               </label>
-              <select
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-xs text-zinc-900 focus:ring-1 focus:ring-zinc-900 focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
-              >
-                <option value="">Select Supplier...</option>
-                {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative w-full">
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="Search & Select Supplier..."
+                    value={
+                      isSupplierDropdownOpen
+                        ? supplierSearchText
+                        : (suppliers.find((s) => s.id === supplierId)?.name || "")
+                    }
+                    onChange={(e) => {
+                      setSupplierSearchText(e.target.value)
+                      setIsSupplierDropdownOpen(true)
+                    }}
+                    onFocus={() => {
+                      setIsSupplierDropdownOpen(true)
+                      setSupplierSearchText("")
+                    }}
+                    onKeyDown={handleSupplierSearchKeyDown}
+                    className="h-9 w-full pr-8 text-xs bg-white dark:bg-zinc-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsSupplierDropdownOpen(!isSupplierDropdownOpen)}
+                    className="absolute top-0 right-0 flex h-9 w-8 items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {isSupplierDropdownOpen && (
+                  <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+                    {filteredSuppliers.length === 0 ? (
+                      <div className="p-2 text-center text-xs text-muted-foreground">
+                        No suppliers found
+                      </div>
+                    ) : (
+                      filteredSuppliers.map((s, idx) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSupplierId(s.id || "")
+                            setSupplierSearchText(s.name)
+                            setIsSupplierDropdownOpen(false)
+                          }}
+                          className={`flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-xs text-zinc-900 transition-colors duration-100 hover:bg-zinc-100 dark:text-zinc-50 dark:hover:bg-zinc-900 ${
+                            s.id === supplierId || idx === activeSupplierSearchIndex
+                              ? "bg-zinc-100 dark:bg-zinc-900"
+                              : ""
+                          }`}
+                        >
+                          <div>
+                            <div className="font-semibold">{s.name}</div>
+                            {s.phone && (
+                              <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                                Phone: {s.phone}
+                              </div>
+                            )}
+                          </div>
+                          {s.id === supplierId && (
+                            <Check className="h-3.5 w-3.5 text-indigo-500" />
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -1860,16 +2309,58 @@ export default function CreatePurchaseInvoice() {
 
           {/* Grid Item Table Details */}
           <Section className="overflow-hidden rounded-xl border border-border bg-card p-0 shadow-xs">
-            <div className="flex items-center justify-between border-b border-border bg-muted/20 p-4">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                Invoice Line Items
-              </h2>
+            <div className="flex flex-col gap-4 border-b border-border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 w-full sm:flex-row sm:items-center">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 shrink-0">
+                  Invoice Line Items
+                </h2>
+                <div className="relative w-full max-w-md" id="product-quick-search-container">
+                  <div className="relative">
+                    <Search className="absolute top-2.5 left-3 h-4 w-4 text-zinc-400" />
+                    <Input
+                      type="text"
+                      placeholder="Quick Search & Add Product (Name, Code, or scan Barcode)..."
+                      value={quickSearchText}
+                      onChange={(e) => setQuickSearchText(e.target.value)}
+                      onKeyDown={handleQuickSearchKeyDown}
+                      className="h-9 pl-9 text-xs w-full bg-white dark:bg-zinc-900"
+                    />
+                    {isQuickSearching && (
+                      <Loader2 className="absolute top-2.5 right-3 h-4 w-4 animate-spin text-zinc-400" />
+                    )}
+                  </div>
+                  {quickSearchResults.length > 0 && (
+                    <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+                      {quickSearchResults.map((prod, idx) => (
+                        <button
+                          key={prod.id}
+                          type="button"
+                          onClick={() => handleSelectQuickAddProduct(prod)}
+                          className={`flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-xs text-zinc-900 transition-colors duration-100 hover:bg-zinc-100 dark:text-zinc-50 dark:hover:bg-zinc-900 ${
+                            idx === activeQuickSearchIndex ? "bg-zinc-100 dark:bg-zinc-900" : ""
+                          }`}
+                        >
+                          <div>
+                            <div className="font-semibold">{prod.name}</div>
+                            <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                              Code: {prod.productCode} {prod.sku ? `• SKU: ${prod.sku}` : ""}
+                            </div>
+                          </div>
+                          <div className="text-right font-mono font-semibold">
+                            ₹{(prod.purchaseRate || 0).toFixed(2)}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
               <Button
                 type="button"
                 onClick={addLineItem}
-                className="h-8 gap-1 py-1 text-xs"
+                className="h-8 gap-1 py-1 text-xs shrink-0 self-end sm:self-auto"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Line Item
+                <Plus className="h-3.5 w-3.5" /> Add Blank Row
               </Button>
             </div>{" "}
             <div className="w-full overflow-x-auto">
@@ -1889,7 +2380,10 @@ export default function CreatePurchaseInvoice() {
                     <TableHead className="w-[110px] px-1.5">
                       Expiry Date
                     </TableHead>
-                    <TableHead className="w-[110px] px-1.5 text-right">
+                    <TableHead className="w-[110px] px-1.5">
+                      Unit
+                    </TableHead>
+                    <TableHead className="w-[90px] px-1.5 text-right">
                       Qty
                     </TableHead>
                     <TableHead className="w-[115px] px-1.5 text-right">
@@ -2055,9 +2549,31 @@ export default function CreatePurchaseInvoice() {
                               className="h-8 px-1.5 py-1 text-xs"
                             />
                           </TableCell>
+
+                          {/* Unit Selector */}
+                          <TableCell className="px-1.5 py-2">
+                            <select
+                              value={item.unitId || selectedProduct?.unitId || ""}
+                              onChange={(e) => handleUnitChange(index, e.target.value)}
+                              disabled={!item.productId}
+                              className="h-8 w-full cursor-pointer rounded-md border border-zinc-200 bg-white px-1.5 text-xs text-zinc-900 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+                            >
+                              {selectedProduct && (
+                                <option value={selectedProduct.unitId}>
+                                  {selectedProduct.unitName} (Base)
+                                </option>
+                              )}
+                              {selectedProduct?.alternativeUnits?.map((alt) => (
+                                <option key={alt.alternativeUnitId} value={alt.alternativeUnitId}>
+                                  {alt.alternativeUnitName} (x{alt.conversionFactor})
+                                </option>
+                              ))}
+                            </select>
+                          </TableCell>
                           <TableCell className="px-1.5 py-2">
                             <div className="flex items-center gap-1">
                               <Input
+                                id={`qty-input-${index}`}
                                 type="number"
                                 min="1"
                                 step="1"
@@ -2975,6 +3491,7 @@ export default function CreatePurchaseInvoice() {
                         <th className="w-[180px] p-2">Excel Input</th>
                         <th className="w-[200px] p-2">Product Match</th>
                         <th className="w-[110px] p-2">Variant</th>
+                        <th className="w-[110px] p-2">Unit</th>
                         <th className="w-[220px] p-2">Batch & Expiry Date</th>
                         <th className="w-[70px] p-2 text-right">Qty</th>
                         <th className="w-[75px] p-2 text-right">Free Qty</th>
@@ -2991,7 +3508,7 @@ export default function CreatePurchaseInvoice() {
                       {previewItems.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={14}
+                            colSpan={15}
                             className="py-8 text-center text-xs text-muted-foreground"
                           >
                             No items to preview. Add a row to get started.
@@ -3117,6 +3634,35 @@ export default function CreatePurchaseInvoice() {
                                       {v.variantCombination || v.sku}
                                     </option>
                                   ))}
+                                </select>
+                              </td>
+
+                              <td className="p-2">
+                                <select
+                                  value={item.unitId || ""}
+                                  onChange={(e) =>
+                                    handlePreviewItemChange(idx, "unitId", e.target.value)
+                                  }
+                                  disabled={!item.productId}
+                                  className="h-8 w-full cursor-pointer rounded-md border border-zinc-200 bg-white px-1.5 text-xs text-zinc-900 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+                                >
+                                  {(() => {
+                                    const matchedProduct = products.find((p) => p.id === item.productId)
+                                    return (
+                                      <>
+                                        {matchedProduct && (
+                                          <option value={matchedProduct.unitId}>
+                                            {matchedProduct.unitName} (Base)
+                                          </option>
+                                        )}
+                                        {matchedProduct?.alternativeUnits?.map((alt) => (
+                                          <option key={alt.alternativeUnitId} value={alt.alternativeUnitId}>
+                                            {alt.alternativeUnitName} (x{alt.conversionFactor})
+                                          </option>
+                                        ))}
+                                      </>
+                                    )
+                                  })()}
                                 </select>
                               </td>
 

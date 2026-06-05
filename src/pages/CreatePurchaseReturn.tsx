@@ -111,6 +111,7 @@ export default function CreatePurchaseReturn() {
   // Purchase Invoice Selection Dialog states
   const [selectingInvoice, setSelectingInvoice] = useState(false);
   const [invoiceSearchText, setInvoiceSearchText] = useState('');
+  const [activeInvoiceSearchIndex, setActiveInvoiceSearchIndex] = useState(-1);
 
   // Filter invoices client-side inside the search dialog
   const filteredInvoices = useMemo(() => {
@@ -123,6 +124,50 @@ export default function CreatePurchaseReturn() {
       );
     });
   }, [invoices, invoiceSearchText]);
+
+  useEffect(() => {
+    setActiveInvoiceSearchIndex(filteredInvoices.length > 0 ? 0 : -1);
+  }, [filteredInvoices, selectingInvoice]);
+
+  useEffect(() => {
+    if (activeInvoiceSearchIndex >= 0 && selectingInvoice) {
+      const container = document.querySelector("#invoice-dialog-scroll-container");
+      const activeEl = container?.children[activeInvoiceSearchIndex] as HTMLElement;
+      if (activeEl && container) {
+        const containerTop = container.scrollTop;
+        const containerBottom = containerTop + container.clientHeight;
+        const elemTop = activeEl.offsetTop;
+        const elemBottom = elemTop + activeEl.clientHeight;
+
+        if (elemTop < containerTop) {
+          container.scrollTop = elemTop;
+        } else if (elemBottom > containerBottom) {
+          container.scrollTop = elemBottom - container.clientHeight;
+        }
+      }
+    }
+  }, [activeInvoiceSearchIndex, selectingInvoice]);
+
+  const handleInvoiceSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveInvoiceSearchIndex((prev) =>
+        prev < filteredInvoices.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveInvoiceSearchIndex((prev) => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeInvoiceSearchIndex >= 0 && activeInvoiceSearchIndex < filteredInvoices.length) {
+        const inv = filteredInvoices[activeInvoiceSearchIndex];
+        handleInvoiceChange(inv.id);
+        setSelectingInvoice(false);
+      }
+    } else if (e.key === "Escape") {
+      setSelectingInvoice(false);
+    }
+  };
 
   // Return Document Details
   const [returnNo, setReturnNo] = useState('');
@@ -627,24 +672,25 @@ export default function CreatePurchaseReturn() {
               placeholder="Search by invoice no or supplier name..."
               value={invoiceSearchText}
               onChange={(e) => setInvoiceSearchText(e.target.value)}
+              onKeyDown={handleInvoiceSearchKeyDown}
               className="pl-9"
             />
           </div>
-          <div className="max-h-[300px] overflow-y-auto mt-4 divide-y divide-border">
+          <div className="max-h-[300px] overflow-y-auto mt-4 divide-y divide-border" id="invoice-dialog-scroll-container">
             {isLoadingInvoices ? (
               <div className="flex flex-col items-center justify-center py-10 gap-2">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Loading invoices...</span>
               </div>
             ) : (
-              filteredInvoices.map((inv) => (
+              filteredInvoices.map((inv, idx) => (
                 <div 
                   key={inv.id}
                   onClick={() => {
                     handleInvoiceChange(inv.id);
                     setSelectingInvoice(false);
                   }}
-                  className={`p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer flex justify-between items-center transition-colors ${selectedInvoiceId === inv.id ? 'bg-accent text-accent-foreground' : ''}`}
+                  className={`p-3 hover:bg-accent hover:text-accent-foreground cursor-pointer flex justify-between items-center transition-colors ${selectedInvoiceId === inv.id || idx === activeInvoiceSearchIndex ? 'bg-accent text-accent-foreground' : ''}`}
                 >
                   <div className="min-w-0 flex-1 pr-3">
                     <div className="font-bold text-sm font-mono text-zinc-900 dark:text-zinc-100 truncate">{inv.invoiceNo}</div>

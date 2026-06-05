@@ -8,6 +8,7 @@ import {
   Save,
   ArrowLeft,
   CheckCircle2,
+  Check,
 } from "lucide-react"
 import { Page } from "@/components/ui/page"
 import { Section } from "@/components/ui/section"
@@ -73,6 +74,9 @@ export default function CreateSalesInvoice() {
 
   // Invoice master form state
   const [customerId, setCustomerId] = useState("")
+  const [customerSearchText, setCustomerSearchText] = useState("")
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false)
+  const [activeCustomerSearchIndex, setActiveCustomerSearchIndex] = useState(-1)
   const [warehouseId, setWarehouseId] = useState("")
   const [invoiceNo, setInvoiceNo] = useState("")
   const [referenceNo, setReferenceNo] = useState("")
@@ -90,11 +94,27 @@ export default function CreateSalesInvoice() {
   // Invoice details items state
   const [items, setItems] = useState<SalesInvoiceItemDto[]>([])
 
+  // Quick product search state
+  const [quickSearchText, setQuickSearchText] = useState("")
+  const [quickSearchResults, setQuickSearchResults] = useState<ProductDto[]>([])
+  const [isQuickSearching, setIsQuickSearching] = useState(false)
+  const [activeQuickSearchIndex, setActiveQuickSearchIndex] = useState(-1)
+
   // Dialog product selection state
   const [selectingProductForIndex, setSelectingProductForIndex] = useState<number | null>(null)
   const [dialogSearch, setDialogSearch] = useState("")
   const [lookupProducts, setLookupProducts] = useState<ProductDto[]>([])
   const [isSearchingProducts, setIsSearchingProducts] = useState(false)
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearchText.trim()) return customers
+    return customers.filter(
+      (c) =>
+        c.name.toLowerCase().includes(customerSearchText.toLowerCase()) ||
+        (c.phone && c.phone.includes(customerSearchText)) ||
+        (c.code && c.code.toLowerCase().includes(customerSearchText.toLowerCase()))
+    )
+  }, [customers, customerSearchText])
 
   const filteredWarehouses = useMemo(() => {
     if (user?.warehouseId) {
@@ -102,6 +122,88 @@ export default function CreateSalesInvoice() {
     }
     return warehouses
   }, [warehouses, user?.warehouseId])
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const container = document.getElementById("customer-select-container")
+      if (container && !container.contains(event.target as Node)) {
+        setIsCustomerDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    setActiveCustomerSearchIndex(filteredCustomers.length > 0 ? 0 : -1)
+  }, [filteredCustomers, isCustomerDropdownOpen])
+
+  useEffect(() => {
+    if (activeCustomerSearchIndex >= 0 && isCustomerDropdownOpen) {
+      const container = document.querySelector("#customer-select-container .overflow-y-auto")
+      const activeEl = container?.children[activeCustomerSearchIndex] as HTMLElement
+      if (activeEl && container) {
+        const containerTop = container.scrollTop
+        const containerBottom = containerTop + container.clientHeight
+        const elemTop = activeEl.offsetTop
+        const elemBottom = elemTop + activeEl.clientHeight
+
+        if (elemTop < containerTop) {
+          container.scrollTop = elemTop
+        } else if (elemBottom > containerBottom) {
+          container.scrollTop = elemBottom - container.clientHeight
+        }
+      }
+    }
+  }, [activeCustomerSearchIndex, isCustomerDropdownOpen])
+
+  useEffect(() => {
+    if (activeQuickSearchIndex >= 0 && quickSearchResults.length > 0) {
+      const container = document.querySelector("#product-quick-search-container .overflow-y-auto")
+      const activeEl = container?.children[activeQuickSearchIndex] as HTMLElement
+      if (activeEl && container) {
+        const containerTop = container.scrollTop
+        const containerBottom = containerTop + container.clientHeight
+        const elemTop = activeEl.offsetTop
+        const elemBottom = elemTop + activeEl.clientHeight
+
+        if (elemTop < containerTop) {
+          container.scrollTop = elemTop
+        } else if (elemBottom > containerBottom) {
+          container.scrollTop = elemBottom - container.clientHeight
+        }
+      }
+    }
+  }, [activeQuickSearchIndex, quickSearchResults])
+
+  const handleCustomerSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isCustomerDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        setIsCustomerDropdownOpen(true)
+      }
+      return
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveCustomerSearchIndex((prev) =>
+        prev < filteredCustomers.length - 1 ? prev + 1 : prev
+      )
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveCustomerSearchIndex((prev) => (prev > 0 ? prev - 1 : 0))
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      if (activeCustomerSearchIndex >= 0 && activeCustomerSearchIndex < filteredCustomers.length) {
+        const c = filteredCustomers[activeCustomerSearchIndex]
+        setCustomerId(c.id || "")
+        setCustomerSearchText(c.name)
+        setIsCustomerDropdownOpen(false)
+      }
+    } else if (e.key === "Escape") {
+      setIsCustomerDropdownOpen(false)
+    }
+  }
 
   const warehouseStockMap = useMemo(() => {
     const map: { [productId: string]: number } = {}
@@ -397,6 +499,42 @@ export default function CreateSalesInvoice() {
       qty: 1,
       discountPercentage: 0,
       discountAmount: 0,
+      unitId: product.unitId || "",
+      unitName: product.unitName || "",
+      conversionFactor: 1.0,
+    }
+
+    calculateLineTotals(updated, index)
+  }
+
+  // handle unit change
+  const handleUnitChange = (index: number, unitId: string) => {
+    const updated = [...items]
+    const item = updated[index]
+    const product = products.find(p => p.id === item.productId)
+    if (!product) return
+
+    let conversionFactor = 1.0
+    let rate = product.salesRate || 0
+
+    if (unitId === product.unitId) {
+      conversionFactor = 1.0
+      rate = product.salesRate || 0
+    } else {
+      const rule = product.alternativeUnits?.find(c => c.alternativeUnitId === unitId)
+      if (rule) {
+        conversionFactor = rule.conversionFactor
+        rate = rule.salesRate !== undefined && rule.salesRate !== null ? rule.salesRate : (product.salesRate || 0) * conversionFactor
+      }
+    }
+
+    updated[index] = {
+      ...item,
+      unitId: unitId,
+      unitName: units.find(u => u.id === unitId)?.name || "",
+      unitSymbol: units.find(u => u.id === unitId)?.symbol || "",
+      conversionFactor: conversionFactor,
+      rate: rate
     }
 
     calculateLineTotals(updated, index)
@@ -478,6 +616,116 @@ export default function CreateSalesInvoice() {
     }
 
     setItems(list)
+  }
+
+  // Quick search and select product logic
+  useEffect(() => {
+    if (!quickSearchText.trim()) {
+      setQuickSearchResults([])
+      return
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsQuickSearching(true)
+      try {
+        const res: any = await axiosClient.get("/Product", {
+          params: { pageNumber: 1, pageSize: 10, search: quickSearchText }
+        })
+        if (res?.success) {
+          const found = res.data?.items || res.data || []
+          setQuickSearchResults(found)
+          setActiveQuickSearchIndex(found.length > 0 ? 0 : -1)
+
+          // Auto-select exact match for barcode scanner
+          const exactMatch = found.find(
+            (p: any) =>
+              (p.barcode && p.barcode.toLowerCase() === quickSearchText.trim().toLowerCase()) ||
+              (p.productCode && p.productCode.toLowerCase() === quickSearchText.trim().toLowerCase())
+          )
+          if (exactMatch) {
+            handleSelectQuickAddProduct(exactMatch)
+          }
+        }
+      } catch (e) {
+        console.error("Quick search failed", e)
+      } finally {
+        setIsQuickSearching(false)
+      }
+    }, 200)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [quickSearchText])
+
+  const handleQuickSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveQuickSearchIndex((prev) =>
+        prev < quickSearchResults.length - 1 ? prev + 1 : prev
+      )
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveQuickSearchIndex((prev) => (prev > 0 ? prev - 1 : 0))
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      if (activeQuickSearchIndex >= 0 && activeQuickSearchIndex < quickSearchResults.length) {
+        handleSelectQuickAddProduct(quickSearchResults[activeQuickSearchIndex])
+      }
+    } else if (e.key === "Escape") {
+      setQuickSearchResults([])
+    }
+  }
+
+  const handleSelectQuickAddProduct = async (product: ProductDto) => {
+    setProducts((prev) => {
+      if (prev.some((item) => item.id === product.id)) return prev
+      return [...prev, product]
+    })
+
+    const batches = await loadBatchesForProduct(product.id || "")
+    const defaultBatch = batches.length > 0 ? batches[0] : null
+
+    let defaultTaxRate = 0
+    if (product.taxProfileId) {
+      const taxProfile = taxProfiles.find((tp) => tp.id === product.taxProfileId)
+      if (taxProfile) defaultTaxRate = taxProfile.igst
+    }
+
+    const newItem: SalesInvoiceItemDto = {
+      productId: product.id || "",
+      productName: product.name || "",
+      productCode: product.productCode || "",
+      qty: 1,
+      rate: product.salesRate || 0,
+      taxPercentage: defaultTaxRate,
+      taxAmount: 0,
+      discountPercentage: 0,
+      discountAmount: 0,
+      amount: 0,
+      productVariantId: "",
+      productBatchId: defaultBatch?.id || "",
+      batchNumber: defaultBatch?.batchNo || "",
+      expiryDate: defaultBatch?.expiryDate ? defaultBatch.expiryDate.split("T")[0] : "",
+      unitId: product.unitId || "",
+      unitName: product.unitName || "",
+      conversionFactor: 1.0,
+    }
+
+    const updatedItems = [...items, newItem]
+    setItems(updatedItems)
+    calculateLineTotals(updatedItems, updatedItems.length - 1)
+
+    setQuickSearchText("")
+    setQuickSearchResults([])
+    setActiveQuickSearchIndex(-1)
+
+    const newIndex = updatedItems.length - 1
+    setTimeout(() => {
+      const element = document.getElementById(`qty-input-${newIndex}`)
+      if (element) {
+        ;(element as HTMLInputElement).focus()
+        ;(element as HTMLInputElement).select()
+      }
+    }, 100)
   }
 
   // global summaries
@@ -575,14 +823,15 @@ export default function CreateSalesInvoice() {
     const stockOutLimitItem = items.find(
       (item) => {
         const availableStock = warehouseStockMap[item.productId] || 0
-        return Number(item.qty) > availableStock
+        const itemBaseQty = Number(item.qty) * (item.conversionFactor || 1.0)
+        return itemBaseQty > availableStock
       }
     )
     if (stockOutLimitItem) {
       const prodName = products.find(p => p.id === stockOutLimitItem.productId)?.name || "Product"
       const availableStock = warehouseStockMap[stockOutLimitItem.productId] || 0
       toast.error(
-        `Quantity for "${prodName}" (${stockOutLimitItem.qty}) exceeds available stock (${availableStock} available in warehouse).`
+        `Quantity for "${prodName}" (${stockOutLimitItem.qty} ${stockOutLimitItem.unitSymbol || "pcs"}) exceeds available stock (${availableStock} base units available in warehouse).`
       )
       return
     }
@@ -646,6 +895,8 @@ export default function CreateSalesInvoice() {
           discountPercentage: Number(i.discountPercentage) || 0,
           discountAmount: Number(i.discountAmount) || 0,
           amount: Number(i.amount) || 0,
+          unitId: i.unitId || undefined,
+          conversionFactor: i.conversionFactor || 1.0,
         })),
       }
 
@@ -753,22 +1004,86 @@ export default function CreateSalesInvoice() {
       <div className="space-y-6">
         {/* Header Metadata Section */}
         <Section className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-card p-5 shadow-xs md:grid-cols-4">
-          <div className="space-y-1">
+          <div className="space-y-1" id="customer-select-container">
             <label className="text-zinc-550 block text-xs font-semibold tracking-wider uppercase dark:text-zinc-400">
               Customer *
             </label>
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-xs text-zinc-900 focus:ring-1 focus:ring-zinc-900 focus:outline-hidden dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
-            >
-              <option value="">Select Customer...</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.phone ? `(${c.phone})` : ""}
-                </option>
-              ))}
-            </select>
+            <div className="relative w-full">
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Search & Select Customer..."
+                  value={
+                    isCustomerDropdownOpen
+                      ? customerSearchText
+                      : (customers.find((c) => c.id === customerId)
+                          ? `${customers.find((c) => c.id === customerId)?.name} ${
+                              customers.find((c) => c.id === customerId)?.phone
+                                ? `(${customers.find((c) => c.id === customerId)?.phone})`
+                                : ""
+                            }`
+                          : "")
+                  }
+                  onChange={(e) => {
+                    setCustomerSearchText(e.target.value)
+                    setIsCustomerDropdownOpen(true)
+                  }}
+                  onFocus={() => {
+                    setIsCustomerDropdownOpen(true)
+                    setCustomerSearchText("")
+                  }}
+                  onKeyDown={handleCustomerSearchKeyDown}
+                  className="h-9 w-full pr-8 text-xs bg-white dark:bg-zinc-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                  className="absolute top-0 right-0 flex h-9 w-8 items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {isCustomerDropdownOpen && (
+                <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+                  {filteredCustomers.length === 0 ? (
+                    <div className="p-2 text-center text-xs text-muted-foreground">
+                      No customers found
+                    </div>
+                  ) : (
+                    filteredCustomers.map((c, idx) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setCustomerId(c.id || "")
+                          setCustomerSearchText(c.name)
+                          setIsCustomerDropdownOpen(false)
+                        }}
+                        className={`flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-xs text-zinc-900 transition-colors duration-100 hover:bg-zinc-100 dark:text-zinc-50 dark:hover:bg-zinc-900 ${
+                          c.id === customerId || idx === activeCustomerSearchIndex
+                            ? "bg-zinc-100 dark:bg-zinc-900"
+                            : ""
+                        }`}
+                      >
+                        <div>
+                          <div className="font-semibold">
+                            {c.name} {c.code ? `(${c.code})` : ""}
+                          </div>
+                          {c.phone && (
+                            <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                              Phone: {c.phone}
+                            </div>
+                          )}
+                        </div>
+                        {c.id === customerId && (
+                          <Check className="h-3.5 w-3.5 text-indigo-500" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -844,16 +1159,58 @@ export default function CreateSalesInvoice() {
 
         {/* Invoice Items Table Details */}
         <Section className="overflow-hidden rounded-xl border border-border bg-card p-0 shadow-xs">
-          <div className="flex items-center justify-between border-b border-border bg-muted/20 p-4">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-              Invoice Line Items
-            </h2>
+          <div className="flex flex-col gap-4 border-b border-border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 w-full sm:flex-row sm:items-center">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50 shrink-0">
+                Invoice Line Items
+              </h2>
+              <div className="relative w-full max-w-md" id="product-quick-search-container">
+                <div className="relative">
+                  <Search className="absolute top-2.5 left-3 h-4 w-4 text-zinc-400" />
+                  <Input
+                    type="text"
+                    placeholder="Quick Search & Add Product (Name, Code, or scan Barcode)..."
+                    value={quickSearchText}
+                    onChange={(e) => setQuickSearchText(e.target.value)}
+                    onKeyDown={handleQuickSearchKeyDown}
+                    className="h-9 pl-9 text-xs w-full bg-white dark:bg-zinc-900"
+                  />
+                  {isQuickSearching && (
+                    <Loader2 className="absolute top-2.5 right-3 h-4 w-4 animate-spin text-zinc-400" />
+                  )}
+                </div>
+                {quickSearchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+                    {quickSearchResults.map((prod, idx) => (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => handleSelectQuickAddProduct(prod)}
+                        className={`flex w-full cursor-pointer items-center justify-between rounded-md p-2 text-left text-xs text-zinc-900 transition-colors duration-100 hover:bg-zinc-100 dark:text-zinc-50 dark:hover:bg-zinc-900 ${
+                          idx === activeQuickSearchIndex ? "bg-zinc-100 dark:bg-zinc-900" : ""
+                        }`}
+                      >
+                        <div>
+                          <div className="font-semibold">{prod.name}</div>
+                          <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                            Code: {prod.productCode} {prod.sku ? `• SKU: ${prod.sku}` : ""}
+                          </div>
+                        </div>
+                        <div className="text-right font-mono font-semibold">
+                          ₹{(prod.salesRate || 0).toFixed(2)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
             <Button
               type="button"
               onClick={addLineItem}
-              className="h-8 gap-1 py-1 text-xs"
+              className="h-8 gap-1 py-1 text-xs shrink-0 self-end sm:self-auto"
             >
-              <Plus className="h-3.5 w-3.5" /> Add Line Item
+              <Plus className="h-3.5 w-3.5" /> Add Blank Row
             </Button>
           </div>
 
@@ -866,7 +1223,8 @@ export default function CreateSalesInvoice() {
                   <TableHead className="w-[120px] px-1.5">Variant</TableHead>
                   <TableHead className="w-[150px] px-1.5">Batch No.</TableHead>
                   <TableHead className="w-[110px] px-1.5 text-center">Expiry Date</TableHead>
-                  <TableHead className="w-[110px] px-1.5 text-right">Qty</TableHead>
+                  <TableHead className="w-[110px] px-1.5">Unit</TableHead>
+                  <TableHead className="w-[90px] px-1.5 text-right">Qty</TableHead>
                   <TableHead className="w-[100px] px-1.5 text-right">Price (₹)</TableHead>
                   <TableHead className="w-[80px] px-1.5 text-right">Disc %</TableHead>
                   <TableHead className="w-[80px] px-1.5 text-right">Tax %</TableHead>
@@ -975,12 +1333,34 @@ export default function CreateSalesInvoice() {
                           {item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : "-"}
                         </TableCell>
 
+                        {/* Unit Selector */}
+                        <TableCell className="px-1.5 py-2">
+                          <select
+                            value={item.unitId || selectedProduct?.unitId || ""}
+                            onChange={(e) => handleUnitChange(index, e.target.value)}
+                            disabled={!item.productId}
+                            className="h-8 w-full cursor-pointer rounded-md border border-zinc-200 bg-white px-1 px-1.5 text-xs text-zinc-900 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+                          >
+                            {selectedProduct && (
+                              <option value={selectedProduct.unitId}>
+                                {selectedProduct.unitName} (Base)
+                              </option>
+                            )}
+                            {selectedProduct?.alternativeUnits?.map((alt) => (
+                              <option key={alt.alternativeUnitId} value={alt.alternativeUnitId}>
+                                {alt.alternativeUnitName} (x{alt.conversionFactor})
+                              </option>
+                            ))}
+                          </select>
+                        </TableCell>
+
                         {/* Quantity */}
                         <TableCell className="px-1.5 py-2">
                           {(() => {
                             const decimalAllowed = isDecimalAllowedForProduct(item.productId)
                             return (
                               <Input
+                                id={`qty-input-${index}`}
                                 type="number"
                                 min={decimalAllowed ? "0.001" : "1"}
                                 step={decimalAllowed ? "any" : "1"}

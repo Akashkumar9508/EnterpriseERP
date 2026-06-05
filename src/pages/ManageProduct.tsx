@@ -44,7 +44,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
-import type { ProductDto } from '@/types/ProductDto';
+import type { ProductDto, ProductUnitConversionDto } from '@/types/ProductDto';
 import type { CategoryDto } from '@/types/CategoryDto';
 import type { BrandDto } from '@/types/BrandDto';
 import type { ManufacturerDto } from '@/types/ManufacturerDto';
@@ -305,6 +305,71 @@ export default function ManageProduct() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('general');
 
+  const [dialogConversions, setDialogConversions] = useState<ProductUnitConversionDto[]>([]);
+  const [newAltUnitId, setNewAltUnitId] = useState('');
+  const [newConversionFactor, setNewConversionFactor] = useState('');
+  const [newSalesRate, setNewSalesRate] = useState('');
+  const [newPurchaseRate, setNewPurchaseRate] = useState('');
+  const [newMrp, setNewMrp] = useState('');
+
+  const handleAddConversion = () => {
+    if (!newAltUnitId) {
+      toast.error('Please select an alternative unit.');
+      return;
+    }
+    const factor = parseFloat(newConversionFactor);
+    if (isNaN(factor) || factor <= 0) {
+      toast.error('Please enter a valid conversion factor greater than 0.');
+      return;
+    }
+    
+    const baseUnitId = watch('unitId');
+    if (!baseUnitId) {
+      toast.error('Please select a Base Unit in the General tab first.');
+      return;
+    }
+
+    if (newAltUnitId === baseUnitId) {
+      toast.error('Alternative unit cannot be the same as the base unit.');
+      return;
+    }
+
+    if (dialogConversions.some(c => c.alternativeUnitId === newAltUnitId)) {
+      toast.error('A conversion rule already exists for this alternative unit.');
+      return;
+    }
+
+    const altUnit = units.find(u => u.id === newAltUnitId);
+    const baseUnit = units.find(u => u.id === baseUnitId);
+
+    const newConv: ProductUnitConversionDto = {
+      alternativeUnitId: newAltUnitId,
+      alternativeUnitName: altUnit?.name || '',
+      alternativeUnitSymbol: altUnit?.symbol || '',
+      baseUnitId: baseUnitId,
+      baseUnitName: baseUnit?.name || '',
+      baseUnitSymbol: baseUnit?.symbol || '',
+      conversionFactor: factor,
+      salesRate: newSalesRate ? parseFloat(newSalesRate) : undefined,
+      purchaseRate: newPurchaseRate ? parseFloat(newPurchaseRate) : undefined,
+      mrp: newMrp ? parseFloat(newMrp) : undefined
+    };
+
+    setDialogConversions([...dialogConversions, newConv]);
+    
+    setNewAltUnitId('');
+    setNewConversionFactor('');
+    setNewSalesRate('');
+    setNewPurchaseRate('');
+    setNewMrp('');
+    toast.success('Conversion rule added successfully.');
+  };
+
+  const handleRemoveConversion = (index: number) => {
+    setDialogConversions(dialogConversions.filter((_, i) => i !== index));
+    toast.info('Conversion rule removed.');
+  };
+
   const {
     register,
     handleSubmit,
@@ -490,6 +555,7 @@ export default function ManageProduct() {
     });
     setAutoSku(true);
     setEditingId(null);
+    setDialogConversions([]);
     setActiveTab('general');
     setIsDialogOpen(true);
   };
@@ -522,6 +588,7 @@ export default function ManageProduct() {
     });
     setAutoSku(false);
     setEditingId(p.id || null);
+    setDialogConversions(p.alternativeUnits || []);
     setActiveTab('general');
     setIsDialogOpen(true);
   };
@@ -539,6 +606,7 @@ export default function ManageProduct() {
         purchaseRate: Number(data.purchaseRate),
         salesRate: Number(data.salesRate),
         mrp: Number(data.mrp),
+        alternativeUnits: dialogConversions,
       };
 
       let response: any;
@@ -836,7 +904,7 @@ export default function ManageProduct() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="py-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid grid-cols-4 w-full mb-6">
+              <TabsList className="grid grid-cols-5 w-full mb-6">
                 <TabsTrigger value="general" className="flex items-center gap-1.5 text-xs sm:text-sm">
                   <Tag className="h-3.5 w-3.5" /> General
                 </TabsTrigger>
@@ -848,6 +916,9 @@ export default function ManageProduct() {
                 </TabsTrigger>
                 <TabsTrigger value="inventory" className="flex items-center gap-1.5 text-xs sm:text-sm">
                   <Settings2 className="h-3.5 w-3.5" /> Inventory
+                </TabsTrigger>
+                <TabsTrigger value="conversions" className="flex items-center gap-1.5 text-xs sm:text-sm">
+                  <Settings2 className="h-3.5 w-3.5" /> Conversions
                 </TabsTrigger>
               </TabsList>
 
@@ -1190,6 +1261,140 @@ export default function ManageProduct() {
                     checked={watch('isActive')}
                     onCheckedChange={(checked) => setValue('isActive', checked)}
                   />
+                </div>
+              </TabsContent>
+
+              {/* Tab 5: Unit Conversions */}
+              <TabsContent value="conversions" className="space-y-4 outline-none">
+                <div className="bg-muted/30 p-4 rounded-lg border border-border">
+                  <h3 className="text-sm font-semibold mb-2">Configure Unit Conversions</h3>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Define conversion rates from alternative units (e.g. Strip, Box) to the product's Base Unit. 
+                    All physical inventory transactions will be converted to base units.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Alternative Unit</label>
+                      <Select
+                        value={newAltUnitId}
+                        onValueChange={setNewAltUnitId}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Alt Unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {units
+                            .filter(u => u.id !== watch('unitId')) // Exclude selected Base Unit
+                            .map((u) => (
+                              <SelectItem key={u.id} value={u.id || ''}>
+                                {u.name} ({u.symbol})
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Conversion Factor (Multiplier)</label>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 13"
+                        value={newConversionFactor}
+                        onChange={(e) => setNewConversionFactor(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Sales Rate Override (₹, Optional)</label>
+                      <Input
+                        type="number"
+                        placeholder="Override rate"
+                        value={newSalesRate}
+                        onChange={(e) => setNewSalesRate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Purchase Rate Override (₹, Optional)</label>
+                      <Input
+                        type="number"
+                        placeholder="Override rate"
+                        value={newPurchaseRate}
+                        onChange={(e) => setNewPurchaseRate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">MRP Override (₹, Optional)</label>
+                      <Input
+                        type="number"
+                        placeholder="Override MRP"
+                        value={newMrp}
+                        onChange={(e) => setNewMrp(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <Button type="button" onClick={handleAddConversion} className="w-full text-xs h-9">
+                    Add Conversion Rule
+                  </Button>
+                </div>
+
+                {/* Conversion Rules List */}
+                <div className="border border-border rounded-lg overflow-hidden bg-card">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Alt Unit</TableHead>
+                        <TableHead>Factor</TableHead>
+                        <TableHead className="text-right">Sales Rate</TableHead>
+                        <TableHead className="text-right">Purchase Rate</TableHead>
+                        <TableHead className="text-right">MRP</TableHead>
+                        <TableHead className="w-[80px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dialogConversions.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-4 text-xs text-muted-foreground">
+                            No conversion rules added yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        dialogConversions.map((conv, index) => (
+                          <TableRow key={index} className="text-xs">
+                            <TableCell className="font-semibold">
+                              {conv.alternativeUnitName || units.find(u => u.id === conv.alternativeUnitId)?.name} ({conv.alternativeUnitSymbol || units.find(u => u.id === conv.alternativeUnitId)?.symbol})
+                            </TableCell>
+                            <TableCell className="font-mono">
+                              1 Alt Unit = {conv.conversionFactor} Base Units
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {conv.salesRate !== undefined && conv.salesRate !== null ? `₹${Number(conv.salesRate).toFixed(2)}` : 'Calculated'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {conv.purchaseRate !== undefined && conv.purchaseRate !== null ? `₹${Number(conv.purchaseRate).toFixed(2)}` : 'Calculated'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">
+                              {conv.mrp !== undefined && conv.mrp !== null ? `₹${Number(conv.mrp).toFixed(2)}` : 'Calculated'}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                                onClick={() => handleRemoveConversion(index)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </TabsContent>
             </Tabs>

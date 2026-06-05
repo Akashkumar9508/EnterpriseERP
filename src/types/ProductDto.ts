@@ -35,4 +35,20 @@ export interface ProductDto {
   taxProfileName?: string;
   unitId?: string;
   unitName?: string;
+  alternativeUnits?: ProductUnitConversionDto[];
+}
+
+export interface ProductUnitConversionDto {
+  id?: string;
+  productId?: string;
+  alternativeUnitId: string;
+  alternativeUnitName?: string;
+  alternativeUnitSymbol?: string;
+  baseUnitId: string;
+  baseUnitName?: string;
+  baseUnitSymbol?: string;
+  conversionFactor: number;
+  salesRate?: number;
+  purchaseRate?: number;
+  mrp?: number;
 }

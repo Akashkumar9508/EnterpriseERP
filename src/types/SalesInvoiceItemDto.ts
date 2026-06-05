@@ -16,4 +16,8 @@ export interface SalesInvoiceItemDto {
   discountPercentage?: number;
   discountAmount?: number;
   amount?: number;
+  unitId?: string;
+  unitName?: string;
+  unitSymbol?: string;
+  conversionFactor?: number;
 }
