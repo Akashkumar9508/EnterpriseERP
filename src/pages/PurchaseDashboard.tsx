@@ -5,10 +5,8 @@ import {
   TrendingUp,
   Coins,
   Users,
-  Package,
   AlertTriangle,
   Clock,
-  Calendar,
   RefreshCw,
   Warehouse as WarehouseIcon,
   Percent,
@@ -229,7 +227,7 @@ interface TaxReport {
 
 
 export default function PurchaseDashboard() {
-  const { canView } = usePermissions('Manage PurchaseDashboard');
+  usePermissions('Manage PurchaseDashboard');
   const user = useAppSelector((state) => state.auth.user);
   const navigate = useNavigate();
 
@@ -1476,7 +1474,7 @@ export default function PurchaseDashboard() {
                           formatter={(v: any) => formatCurrency(Number(v))}
                         />
                         <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]}>
-                          {supplierBreakdownData.map((entry, index) => (
+                          {supplierBreakdownData.map((_, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Bar>
@@ -1507,7 +1505,7 @@ export default function PurchaseDashboard() {
                           contentStyle={{ background: '#18181b', color: '#fff', borderRadius: '8px', border: 'none', fontSize: '11px' }}
                         />
                         <Bar dataKey="Quantity" fill="#10b981" radius={[4, 4, 0, 0]}>
-                          {topProductsData.map((entry, index) => (
+                          {topProductsData.map((_, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
                           ))}
                         </Bar>
@@ -1641,7 +1639,7 @@ export default function PurchaseDashboard() {
                           formatter={(v: any) => formatCurrency(Number(v))}
                         />
                         <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
-                          {customerBreakdownData.map((entry, index) => (
+                          {customerBreakdownData.map((_, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Bar>
@@ -1672,7 +1670,7 @@ export default function PurchaseDashboard() {
                           contentStyle={{ background: '#18181b', color: '#fff', borderRadius: '8px', border: 'none', fontSize: '11px' }}
                         />
                         <Bar dataKey="Quantity" fill="#10b981" radius={[4, 4, 0, 0]}>
-                          {salesTopProductsData.map((entry, index) => (
+                          {salesTopProductsData.map((_, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} />
                           ))}
                         </Bar>

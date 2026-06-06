@@ -5,14 +5,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  TrendingDown,
-  Percent,
-  FileText,
-  DollarSign,
-  Package,
-  Calendar,
-  Layers,
-  ShieldCheck,
 } from "lucide-react"
 import { Page } from "@/components/ui/page"
 import { Section } from "@/components/ui/section"
@@ -35,7 +27,6 @@ import {
 } from "@/components/ui/select"
 import axiosClient from "@/Services/axiosClient"
 import { usePermissions } from "@/hooks/usePermissions"
-import { useAppSelector } from "@/store/hooks"
 import { toast } from "sonner"
 
 import type { PurchaseOrderDto } from "@/types/PurchaseOrderDto"
@@ -66,12 +57,12 @@ export default function ReceivePurchaseOrder() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const { canCreate } = usePermissions("/purchaseorder")
-  const user = useAppSelector((state) => state.auth.user)
+
 
   // States
   const [po, setPo] = useState<PurchaseOrderDto | null>(null)
-  const [products, setProducts] = useState<ProductDto[]>([])
-  const [taxProfiles, setTaxProfiles] = useState<GstDto[]>([])
+  const [_products, setProducts] = useState<ProductDto[]>([])
+  const [_taxProfiles, setTaxProfiles] = useState<GstDto[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
 

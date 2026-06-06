@@ -12,4 +12,5 @@ export interface CompanyDto {
   packageId?: string;
   packageName?: string;
   logoUrl?: string;
+  defaultPrintFormat?: string;
 }

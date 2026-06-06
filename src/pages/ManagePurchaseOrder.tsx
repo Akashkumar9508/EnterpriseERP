@@ -63,14 +63,14 @@ import type { ProductDto } from '@/types/ProductDto';
 
 export default function ManagePurchaseOrder() {
   const navigate = useNavigate();
-  const { canView, canCreate, canEdit, canDelete } = usePermissions('/purchaseorder');
+  const { canView, canCreate } = usePermissions('/purchaseorder');
   const user = useAppSelector((state) => state.auth.user);
 
   // View List States
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
-  const [products, setProducts] = useState<ProductDto[]>([]);
+  const [_products, setProducts] = useState<ProductDto[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<LowStockProductDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingLowStock, setIsLoadingLowStock] = useState(false);
@@ -84,7 +84,7 @@ export default function ManagePurchaseOrder() {
 
   // Pagination
   const [pageNumber, setPageNumber] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
 
   // Creation State
   const [isCreating, setIsCreating] = useState(false);
@@ -255,8 +255,6 @@ export default function ManagePurchaseOrder() {
   }, [orders, search, selectedWarehouseId, selectedStatus, fromDate, toDate]);
 
   // Pagination calculations
-  const totalCount = filteredOrders.length;
-  const totalPages = Math.ceil(totalCount / pageSize);
   const paginatedOrders = useMemo(() => {
     const start = (pageNumber - 1) * pageSize;
     return filteredOrders.slice(start, start + pageSize);
@@ -954,7 +952,6 @@ Thank you!`);
                     </div>
                     <div className="text-right">
                       <span className="font-mono text-sm font-semibold">₹{p.purchaseRate?.toFixed(2)}</span>
-                      <span className="block text-[10px] text-zinc-400">Stock: {p.liveStock || 0}</span>
                     </div>
                   </div>
                 ))
@@ -1111,7 +1108,7 @@ Thank you!`);
               variant="secondary" 
               onClick={fetchOrders}
               className="h-9.5 size-icon shrink-0"
-              tooltip="Refresh List"
+              title="Refresh List"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -1166,7 +1163,7 @@ Thank you!`);
                           size="icon" 
                           onClick={() => handleViewOrder(ord.id!)}
                           className="h-8 w-8 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-                          tooltip="View details"
+                          title="View details"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -1175,7 +1172,7 @@ Thank you!`);
                           size="icon" 
                           onClick={() => handleDownloadPdfById(ord.id!)}
                           className="h-8 w-8 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-                          tooltip="Print / View PDF"
+                          title="Print / View PDF"
                         >
                           <Printer className="h-4 w-4" />
                         </Button>
@@ -1184,7 +1181,7 @@ Thank you!`);
                           size="icon" 
                           onClick={() => setSharingOrder(ord)}
                           className="h-8 w-8 text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-                          tooltip="Share Order"
+                          title="Share Order"
                         >
                           <Share2 className="h-4 w-4" />
                         </Button>
@@ -1195,7 +1192,7 @@ Thank you!`);
                               size="icon" 
                               onClick={() => navigate(`/purchaseorder/receive/${ord.id}`)}
                               className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/20"
-                              tooltip="Receive order"
+                              title="Receive order"
                             >
                               <ArrowRight className="h-4 w-4" />
                             </Button>
@@ -1204,9 +1201,9 @@ Thank you!`);
                               size="icon" 
                               onClick={() => handleCancelOrder(ord.id!)}
                               className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
-                              tooltip="Cancel order"
+                              title="Cancel order"
                             >
-                              <X className="h-4 w-4" />
+                              <X className="h-4.5 w-4.5" />
                             </Button>
                           </>
                         )}

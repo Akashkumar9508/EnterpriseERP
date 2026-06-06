@@ -90,6 +90,8 @@ export default function ManageSalesInvoice() {
   const [invoices, setInvoices] = useState<SalesInvoiceDto[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [printFormat, setPrintFormat] = useState<'a4' | 'thermal'>('a4');
+  const [isUpdatingPrintFormat, setIsUpdatingPrintFormat] = useState(false);
 
   // Filter States
   const [search, setSearch] = useState('');
@@ -118,6 +120,45 @@ export default function ManageSalesInvoice() {
   const [paymentMethod, setPaymentMethod] = useState<number>(1);
   const [paymentRemarks, setPaymentRemarks] = useState<string>('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+
+  useEffect(() => {
+    const fetchCompanyPrintFormat = async () => {
+      if (!user?.companyId) return;
+      try {
+        const response: any = await axiosClient.get('/Company');
+        if (response?.success) {
+          const companies = response.data || [];
+          const myCompany = companies.find((c: any) => c.id === user.companyId);
+          if (myCompany?.defaultPrintFormat === 'thermal' || myCompany?.defaultPrintFormat === 'a4') {
+            setPrintFormat(myCompany.defaultPrintFormat);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch default print format from company', e);
+      }
+    };
+
+    fetchCompanyPrintFormat();
+  }, [user?.companyId]);
+
+  const handlePrintFormatChange = async (newFormat: 'a4' | 'thermal') => {
+    if (!user?.companyId) return;
+    setIsUpdatingPrintFormat(true);
+    try {
+      const response: any = await axiosClient.put(`/Company/${user.companyId}/print-format?printFormat=${newFormat}`);
+      if (response?.success) {
+        setPrintFormat(newFormat);
+        toast.success(`Default print setting saved: ${newFormat === 'thermal' ? 'Thermal Receipt' : 'A4 Size'}`);
+      } else {
+        toast.error(response?.message || 'Failed to update print format.');
+      }
+    } catch (e) {
+      console.error('Failed to update print format', e);
+      toast.error('An error occurred while updating print format.');
+    } finally {
+      setIsUpdatingPrintFormat(false);
+    }
+  };
 
   const fetchInvoices = async () => {
     if (!user?.companyId) return;
@@ -233,7 +274,7 @@ export default function ManageSalesInvoice() {
     }
   };
 
-  const handleDownloadPdf = async (invoice: SalesInvoiceDto) => {
+  const handleDownloadPdf = async (invoice: SalesInvoiceDto, forceFormat?: 'a4' | 'thermal') => {
     let fullInvoice = invoice;
     if (!invoice.items || invoice.items.length === 0) {
       try {
@@ -252,6 +293,8 @@ export default function ManageSalesInvoice() {
       }
     }
 
+    const targetFormat = forceFormat || printFormat;
+
     try {
       let companyInfo = undefined;
       const response: any = await axiosClient.get('/Company');
@@ -261,10 +304,10 @@ export default function ManageSalesInvoice() {
         const targetCompanyId = warehouseObj?.companyId || fullInvoice.companyId || user?.companyId;
         companyInfo = companies.find((c: any) => c.id === targetCompanyId);
       }
-      generateSalesInvoicePdf(fullInvoice, companyInfo);
+      generateSalesInvoicePdf(fullInvoice, companyInfo, 'open', targetFormat);
     } catch (e) {
       console.error('Failed to fetch company details for PDF', e);
-      generateSalesInvoicePdf(fullInvoice);
+      generateSalesInvoicePdf(fullInvoice, undefined, 'open', targetFormat);
     }
   };
 
@@ -330,12 +373,6 @@ export default function ManageSalesInvoice() {
 
     setIsSubmittingPayment(true);
     try {
-      // Update invoice locally
-      const updatedInvoice = {
-        ...payingInvoice,
-        paidAmount: (payingInvoice.paidAmount || 0) + amount,
-      };
-
       // Record payment via the dedicated /pay endpoint
       const response: any = await axiosClient.post(`/SalesInvoice/${payingInvoice.id}/pay`, {
         amount: amount,
@@ -573,6 +610,17 @@ export default function ManageSalesInvoice() {
             </SelectContent>
           </Select>
 
+          <Select value={printFormat} onValueChange={(val: 'a4' | 'thermal') => handlePrintFormatChange(val)} disabled={isUpdatingPrintFormat}>
+            <SelectTrigger className="w-[160px] h-9 shrink-0">
+              <span className="text-muted-foreground mr-1 text-[11px] font-medium">Print Default:</span>
+              <SelectValue placeholder="Print Format" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="a4">A4 Paper</SelectItem>
+              <SelectItem value="thermal">Thermal (80mm)</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Button variant="outline" size="icon" onClick={fetchInvoices} className="h-9 w-9 shrink-0" title="Refresh List">
             <RefreshCw className={`h-4.5 w-4.5 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
@@ -713,7 +761,7 @@ export default function ManageSalesInvoice() {
                           size="icon"
                           className="h-8 w-8 hover:bg-zinc-50 hover:text-zinc-650 dark:hover:bg-zinc-950/20 dark:hover:text-zinc-400"
                           onClick={() => handleDownloadPdf(inv)}
-                          title="Download PDF Invoice"
+                          title={`Print Invoice (${printFormat === 'thermal' ? 'Thermal Receipt' : 'A4 PDF'})`}
                         >
                           <Printer className="h-4 w-4 text-violet-500" />
                         </Button>
@@ -975,14 +1023,25 @@ export default function ManageSalesInvoice() {
                 </Button>
               )}
               {viewingInvoice && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex items-center gap-2 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-violet-600 dark:text-violet-400"
-                  onClick={() => handleDownloadPdf(viewingInvoice)}
-                >
-                  <Printer className="h-4 w-4 mr-1.5" /> Download PDF Receipt
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex items-center gap-2 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-violet-600 dark:text-violet-400 font-semibold"
+                    onClick={() => handleDownloadPdf(viewingInvoice)}
+                  >
+                    <Printer className="h-4 w-4 mr-1.5" /> Print {printFormat === 'thermal' ? 'Thermal' : 'A4'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="px-2.5 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 text-xs shrink-0"
+                    onClick={() => handleDownloadPdf(viewingInvoice, printFormat === 'thermal' ? 'a4' : 'thermal')}
+                    title={`Print in ${printFormat === 'thermal' ? 'A4 Size' : 'Thermal (80mm)'} instead`}
+                  >
+                    Print {printFormat === 'thermal' ? 'A4' : 'Thermal'} instead
+                  </Button>
+                </div>
               )}
               <Button
                 type="button"

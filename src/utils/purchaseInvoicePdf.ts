@@ -26,7 +26,6 @@ export const generatePurchaseInvoicePdf = (
   const primaryColor = [79, 70, 229]; // Indigo hex #4f46e5 (Purchase theme)
   const darkTextColor = [31, 41, 55]; // Charcoal #1f2937
   const grayTextColor = [107, 114, 128]; // Gray #6b7280
-  const lightGrayColor = [243, 244, 246]; // Light gray #f3f4f6
 
   // Helper for text formatting
   const setDarkText = () => doc.setTextColor(darkTextColor[0], darkTextColor[1], darkTextColor[2]);

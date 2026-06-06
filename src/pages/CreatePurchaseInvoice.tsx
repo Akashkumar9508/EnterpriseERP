@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
   Plus,
@@ -160,6 +160,7 @@ export default function CreatePurchaseInvoice() {
   const [quickSearchResults, setQuickSearchResults] = useState<ProductDto[]>([])
   const [isQuickSearching, setIsQuickSearching] = useState(false)
   const [activeQuickSearchIndex, setActiveQuickSearchIndex] = useState(-1)
+  const quickSearchInputRef = useRef<HTMLInputElement>(null)
 
   // dialog product selection state
   const [selectingProductForIndex, setSelectingProductForIndex] = useState<
@@ -266,6 +267,44 @@ export default function CreatePurchaseInvoice() {
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    // Focus on mount
+    setTimeout(() => {
+      quickSearchInputRef.current?.focus()
+    }, 100)
+
+    // Global keyboard listener to redirect typing to quick search
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        e.key === "Tab" ||
+        e.key === "Enter" ||
+        e.key === "Backspace" ||
+        e.key === "Escape" ||
+        e.key === "Shift"
+      ) {
+        return
+      }
+
+      const activeEl = document.activeElement
+      const isInputActive =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "SELECT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.getAttribute("contenteditable") === "true")
+
+      if (!isInputActive && quickSearchInputRef.current) {
+        quickSearchInputRef.current.focus()
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown)
   }, [])
 
   useEffect(() => {
@@ -1504,16 +1543,17 @@ export default function CreatePurchaseInvoice() {
 
         let resolvedUnitId = matchedProduct.unitId || ""
         let resolvedUnitName = matchedProduct.unitName || ""
-        let resolvedUnitSymbol = matchedProduct.unitSymbol || ""
+        const matchedProductUnitSymbol = units.find((u) => u.id === matchedProduct.unitId)?.symbol || ""
+        let resolvedUnitSymbol = matchedProductUnitSymbol
 
         if (unitSearch) {
           if (
             matchedProduct.unitName?.toLowerCase() === unitSearch.toLowerCase() ||
-            matchedProduct.unitSymbol?.toLowerCase() === unitSearch.toLowerCase()
+            matchedProductUnitSymbol.toLowerCase() === unitSearch.toLowerCase()
           ) {
             resolvedUnitId = matchedProduct.unitId || ""
             resolvedUnitName = matchedProduct.unitName || ""
-            resolvedUnitSymbol = matchedProduct.unitSymbol || ""
+            resolvedUnitSymbol = matchedProductUnitSymbol
             conversionFactor = 1.0
           } else {
             const rule = matchedProduct.alternativeUnits?.find(
@@ -1706,7 +1746,7 @@ export default function CreatePurchaseInvoice() {
           taxPercent: defaultTaxRate,
           unitId: prod.unitId || "",
           unitName: prod.unitName || "",
-          unitSymbol: prod.unitSymbol || "",
+          unitSymbol: units.find((u) => u.id === prod.unitId)?.symbol || "",
           conversionFactor: 1.0,
         }
       } else {
@@ -2320,6 +2360,8 @@ export default function CreatePurchaseInvoice() {
                   <div className="relative">
                     <Search className="absolute top-2.5 left-3 h-4 w-4 text-zinc-400" />
                     <Input
+                      ref={quickSearchInputRef}
+                      autoFocus
                       type="text"
                       placeholder="Quick Search & Add Product (Name, Code, or scan Barcode)..."
                       value={quickSearchText}

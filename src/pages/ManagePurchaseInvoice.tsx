@@ -20,7 +20,6 @@ import {
   User,
   Hash,
   StickyNote,
-  ArrowLeftRight,
   Receipt,
   Ban,
   Wallet,

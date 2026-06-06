@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
   Plus,
@@ -99,6 +99,77 @@ export default function CreateSalesInvoice() {
   const [quickSearchResults, setQuickSearchResults] = useState<ProductDto[]>([])
   const [isQuickSearching, setIsQuickSearching] = useState(false)
   const [activeQuickSearchIndex, setActiveQuickSearchIndex] = useState(-1)
+  const quickSearchInputRef = useRef<HTMLInputElement>(null)
+
+  // New Customer Dialog states
+  const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false)
+  const [newCustomerName, setNewCustomerName] = useState("")
+  const [newCustomerPhone, setNewCustomerPhone] = useState("")
+  const [newCustomerEmail, setNewCustomerEmail] = useState("")
+  const [newCustomerGst, setNewCustomerGst] = useState("")
+  const [newCustomerAddress, setNewCustomerAddress] = useState("")
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false)
+
+  const handleCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCustomerName.trim()) {
+      toast.error("Customer name is required.")
+      return
+    }
+    setIsSubmittingCustomer(true)
+    try {
+      const payload = {
+        name: newCustomerName.trim(),
+        phone: newCustomerPhone.trim() || undefined,
+        email: newCustomerEmail.trim() || undefined,
+        gstNumber: newCustomerGst.trim() || undefined,
+        address: newCustomerAddress.trim() || undefined,
+        companyId: user?.companyId,
+        branchId: user?.branchId,
+        openingBalance: 0,
+        creditLimit: 0,
+      }
+
+      const response: any = await axiosClient.post("/Customer", payload)
+      if (response?.success) {
+        toast.success("New customer created successfully!")
+        
+        // Refetch customers list and select the newly created customer
+        const resCust: any = await axiosClient.get("/Customer", { params: { pageNumber: 1, pageSize: 10000 } })
+        if (resCust?.success) {
+          const custs = resCust.data?.items || resCust.data || []
+          setCustomers(custs)
+          
+          // Match the new customer
+          const createdCust = response.data || custs.find((c: any) => c.name === payload.name && c.phone === payload.phone)
+          if (createdCust) {
+            setCustomerId(createdCust.id || "")
+            setCustomerSearchText(createdCust.name)
+          } else if (custs.length > 0) {
+            // fallback
+            const lastCust = custs[custs.length - 1]
+            setCustomerId(lastCust.id || "")
+            setCustomerSearchText(lastCust.name)
+          }
+        }
+        
+        // Reset states and close dialog
+        setNewCustomerName("")
+        setNewCustomerPhone("")
+        setNewCustomerEmail("")
+        setNewCustomerGst("")
+        setNewCustomerAddress("")
+        setIsNewCustomerOpen(false)
+      } else {
+        toast.error(response?.message || "Failed to create customer.")
+      }
+    } catch (err: any) {
+      console.error("Failed to create customer", err)
+      toast.error(err?.response?.data?.message || err?.message || "An error occurred while creating customer.")
+    } finally {
+      setIsSubmittingCustomer(false)
+    }
+  }
 
   // Dialog product selection state
   const [selectingProductForIndex, setSelectingProductForIndex] = useState<number | null>(null)
@@ -132,6 +203,44 @@ export default function CreateSalesInvoice() {
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    // Focus on mount
+    setTimeout(() => {
+      quickSearchInputRef.current?.focus()
+    }, 100)
+
+    // Global keyboard listener to redirect typing to quick search
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        e.key === "Tab" ||
+        e.key === "Enter" ||
+        e.key === "Backspace" ||
+        e.key === "Escape" ||
+        e.key === "Shift"
+      ) {
+        return
+      }
+
+      const activeEl = document.activeElement
+      const isInputActive =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "SELECT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.getAttribute("contenteditable") === "true")
+
+      if (!isInputActive && quickSearchInputRef.current) {
+        quickSearchInputRef.current.focus()
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown)
   }, [])
 
   useEffect(() => {
@@ -269,7 +378,26 @@ export default function CreateSalesInvoice() {
           axiosClient.get("/Unit", { params: { pageNumber: 1, pageSize: 10000 } }),
         ]) as any[]
 
-        if (resCust?.success) setCustomers(resCust.data?.items || resCust.data || [])
+        if (resCust?.success) {
+          const custs = resCust.data?.items || resCust.data || []
+          setCustomers(custs)
+          if (!isEditMode && custs.length > 0) {
+            const defaultCash = custs.find((c: any) => {
+              const nameLower = (c.name || "").toLowerCase()
+              return (
+                nameLower === "cash" ||
+                nameLower.includes("walk-in") ||
+                nameLower.includes("walk in") ||
+                nameLower.includes("retail") ||
+                nameLower.includes("default")
+              )
+            })
+            if (defaultCash) {
+              setCustomerId(defaultCash.id || "")
+              setCustomerSearchText(defaultCash.name || "")
+            }
+          }
+        }
         if (resWh?.success) {
           const whData = resWh.data?.items || resWh.data || []
           setWarehouses(whData)
@@ -1046,8 +1174,23 @@ export default function CreateSalesInvoice() {
               </div>
               {isCustomerDropdownOpen && (
                 <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+                  <div className="border-b border-zinc-100 dark:border-zinc-800 p-1 mb-1">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setNewCustomerName(customerSearchText)
+                        setIsNewCustomerOpen(true)
+                        setIsCustomerDropdownOpen(false)
+                      }}
+                      variant="outline"
+                      className="h-8 w-full justify-start text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 text-xs font-semibold border-dashed border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40"
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add New Customer {customerSearchText ? `"${customerSearchText}"` : ""}
+                    </Button>
+                  </div>
                   {filteredCustomers.length === 0 ? (
-                    <div className="p-2 text-center text-xs text-muted-foreground">
+                    <div className="p-3 text-center text-xs text-muted-foreground">
                       No customers found
                     </div>
                   ) : (
@@ -1169,6 +1312,8 @@ export default function CreateSalesInvoice() {
                 <div className="relative">
                   <Search className="absolute top-2.5 left-3 h-4 w-4 text-zinc-400" />
                   <Input
+                    ref={quickSearchInputRef}
+                    autoFocus
                     type="text"
                     placeholder="Quick Search & Add Product (Name, Code, or scan Barcode)..."
                     value={quickSearchText}
@@ -1826,6 +1971,94 @@ export default function CreateSalesInvoice() {
               Cancel
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Customer Dialog */}
+      <Dialog open={isNewCustomerOpen} onOpenChange={setIsNewCustomerOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 shadow-xl rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">Add New Customer</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateCustomer} className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-500 uppercase">Customer Name *</label>
+              <Input
+                type="text"
+                placeholder="e.g. John Doe"
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                className="h-9 text-xs"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-500 uppercase">Phone Number</label>
+              <Input
+                type="text"
+                placeholder="e.g. 9876543210"
+                value={newCustomerPhone}
+                onChange={(e) => setNewCustomerPhone(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-500 uppercase">Email Address</label>
+              <Input
+                type="email"
+                placeholder="e.g. john@example.com"
+                value={newCustomerEmail}
+                onChange={(e) => setNewCustomerEmail(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-500 uppercase">GST Number</label>
+              <Input
+                type="text"
+                placeholder="e.g. 27AAAAA1111A1Z1"
+                value={newCustomerGst}
+                onChange={(e) => setNewCustomerGst(e.target.value)}
+                className="h-9 text-xs uppercase"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-500 uppercase">Billing Address</label>
+              <Input
+                type="text"
+                placeholder="e.g. 123 Street, City"
+                value={newCustomerAddress}
+                onChange={(e) => setNewCustomerAddress(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-zinc-150 dark:border-zinc-800 pt-3 mt-4">
+              <Button
+                variant="outline"
+                type="button"
+                className="h-8 px-3 text-xs"
+                onClick={() => setIsNewCustomerOpen(false)}
+                disabled={isSubmittingCustomer}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="h-8 px-3 text-xs bg-indigo-600 text-white hover:bg-indigo-700"
+                disabled={isSubmittingCustomer}
+              >
+                {isSubmittingCustomer ? (
+                  <>
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Customer"
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </Page>
