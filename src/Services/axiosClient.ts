@@ -3,8 +3,8 @@ import { store } from "../store/store"
 import { setLicenseExpired } from "../store/slices/authSlice"
 
 // const API_BASE = "https://localhost:44387";
-export const API_BASE = "http://localhost:5262"
-// const API_BASE = "https://webapi.wellnesshospital.org";
+// export const API_BASE = "http://localhost:5262"
+const API_BASE = "https://reactapi.advancedmedicentre.com"
 
 export const IMAGE_BASE = `${API_BASE}/uploads/`
 
@@ -17,7 +17,6 @@ axiosClient.interceptors.request.use(
   (config) => {
     const token = sessionStorage.getItem("bteowkeelnl")
     if (token) {
-      
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
@@ -42,16 +41,20 @@ axiosClient.interceptors.response.use(
         window.location.href = "/admin"
       }
     }
-    const data = error.response?.data;
-    const message = (data && typeof data === 'object')
-      ? (data.message || data.Message || error.message || "Something went wrong")
-      : (data || error.message || "Something went wrong");
+    const data = error.response?.data
+    const message =
+      data && typeof data === "object"
+        ? data.message ||
+          data.Message ||
+          error.message ||
+          "Something went wrong"
+        : data || error.message || "Something went wrong"
 
-    console.error("API Error:", message);
+    console.error("API Error:", message)
     return Promise.reject({
-      ...(data && typeof data === 'object' ? data : {}),
-      message
-    });
+      ...(data && typeof data === "object" ? data : {}),
+      message,
+    })
   }
 )
 
