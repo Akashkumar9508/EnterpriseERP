@@ -1,4 +1,6 @@
 import axios from "axios"
+import { store } from "../store/store"
+import { setLicenseExpired } from "../store/slices/authSlice"
 
 // const API_BASE = "https://localhost:44387";
 export const API_BASE = "http://localhost:5262"
@@ -27,6 +29,11 @@ axiosClient.interceptors.request.use(
 axiosClient.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    // If 402 Payment Required, license has expired or is invalid
+    if (error.response?.status === 402) {
+      store.dispatch(setLicenseExpired({ isExpired: true }))
+    }
+
     // If 401 Unauthorized, clear token and redirect to admin login
     if (error.response?.status === 401) {
       sessionStorage.removeItem("bteowkeelnl")

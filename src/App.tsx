@@ -24,15 +24,23 @@ import ManageStockTransfer from "@/pages/ManageStockTransfer"
 import InventoryStatus from "@/pages/InventoryStatus"
 import ManagePurchaseInvoice from "@/pages/ManagePurchaseInvoice"
 import CreatePurchaseInvoice from "@/pages/CreatePurchaseInvoice"
+import ManagePurchaseOrder from "@/pages/ManagePurchaseOrder"
+import ReceivePurchaseOrder from "@/pages/ReceivePurchaseOrder"
 import ManageBrand from "@/pages/ManageBrand"
 import ManageManufacturer from "@/pages/ManageManufacturer"
 import ManageWarehouse from "@/pages/ManageWarehouse"
+import ManageBranch from "@/pages/ManageBranch"
 import ManageHSNCode from "@/pages/ManageHSNCode"
 import ManageCustomer from "@/pages/ManageCustomer"
 import ManageSupplier from "@/pages/ManageSupplier"
 import PurchaseReports from "@/pages/PurchaseReports"
+import SalesReports from "@/pages/SalesReports"
 import ManagePurchaseReturn from "@/pages/ManagePurchaseReturn"
 import CreatePurchaseReturn from "@/pages/CreatePurchaseReturn"
+import ManageSalesInvoice from "@/pages/ManageSalesInvoice"
+import CreateSalesInvoice from "@/pages/CreateSalesInvoice"
+import ManageSalesReturn from "@/pages/ManageSalesReturn"
+import CreateSalesReturn from "@/pages/CreateSalesReturn"
 import Layout from "@/components/layout"
 import { useAppSelector } from "@/store/hooks"
 import { Toaster } from "@/components/ui/sonner"
@@ -119,6 +127,22 @@ export function App() {
                     element={<CreatePurchaseInvoice />}
                   />
                   <Route
+                    path="purchaseorder"
+                    element={<ManagePurchaseOrder />}
+                  />
+                  <Route
+                    path="purchaseorder/receive/:id"
+                    element={<ReceivePurchaseOrder />}
+                  />
+                  <Route
+                    path="purchase-order"
+                    element={<ManagePurchaseOrder />}
+                  />
+                  <Route
+                    path="purchase-order/receive/:id"
+                    element={<ReceivePurchaseOrder />}
+                  />
+                  <Route
                     path="purchase-return"
                     element={<ManagePurchaseReturn />}
                   />
@@ -130,9 +154,34 @@ export function App() {
                     path="purchase-reports"
                     element={<PurchaseReports />}
                   />
+                  <Route
+                    path="sales-invoice"
+                    element={<ManageSalesInvoice />}
+                  />
+                  <Route
+                    path="sales-invoice/create"
+                    element={<CreateSalesInvoice />}
+                  />
+                  <Route
+                    path="sales-invoice/edit/:id"
+                    element={<CreateSalesInvoice />}
+                  />
+                  <Route
+                    path="sales-return"
+                    element={<ManageSalesReturn />}
+                  />
+                  <Route
+                    path="sales-return/create"
+                    element={<CreateSalesReturn />}
+                  />
+                  <Route
+                    path="sales-reports"
+                    element={<SalesReports />}
+                  />
                   <Route path="brand" element={<ManageBrand />} />
                   <Route path="manufacturer" element={<ManageManufacturer />} />
                   <Route path="warehouse" element={<ManageWarehouse />} />
+                  <Route path="branch" element={<ManageBranch />} />
                   <Route path="hsncode" element={<ManageHSNCode />} />
                   <Route path="customer" element={<ManageCustomer />} />
                   <Route path="supplier" element={<ManageSupplier />} />

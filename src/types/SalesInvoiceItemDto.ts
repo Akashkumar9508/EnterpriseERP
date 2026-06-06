@@ -1,6 +1,6 @@
-export interface PurchaseInvoiceItemDto {
+export interface SalesInvoiceItemDto {
   id?: string;
-  purchaseInvoiceId?: string;
+  salesInvoiceId?: string;
   productId: string;
   productName?: string;
   productCode?: string;
@@ -9,16 +9,13 @@ export interface PurchaseInvoiceItemDto {
   productBatchId?: string;
   batchNumber?: string;
   expiryDate?: string;
-  quantity: number;
-  freeQuantity?: number;
-  purchaseRate: number;
-  salesRate?: number;
-  mrp?: number;
-  discountPercent?: number;
-  discountAmount?: number;
-  taxPercent?: number;
+  qty: number;
+  rate: number;
+  taxPercentage?: number;
   taxAmount?: number;
-  totalAmount?: number;
+  discountPercentage?: number;
+  discountAmount?: number;
+  amount?: number;
   unitId?: string;
   unitName?: string;
   unitSymbol?: string;

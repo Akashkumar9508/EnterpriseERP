@@ -122,12 +122,16 @@ export default function ManageStaffLogin() {
   const fetchMetadata = async () => {
     try {
       const [staffRes, roleRes]: any[] = await Promise.all([
-        axiosClient.get('/Staff'),
-        axiosClient.get('/Role')
+        axiosClient.get('/Staff', { params: { pageNumber: 1, pageSize: 10000 } }),
+        axiosClient.get('/Role', { params: { pageNumber: 1, pageSize: 10000 } })
       ]);
 
       if (staffRes?.success) {
-        setStaffList(staffRes.data || []);
+        if (staffRes.data && staffRes.data.items) {
+          setStaffList(staffRes.data.items);
+        } else {
+          setStaffList(staffRes.data || []);
+        }
       }
       if (roleRes?.success) {
         if (roleRes.data && roleRes.data.items) {

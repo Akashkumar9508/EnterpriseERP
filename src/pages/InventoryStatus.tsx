@@ -50,6 +50,7 @@ interface GroupedProductStock {
   minStock: number;
   stocks: Record<string, number>; // Maps warehouseId -> currentStock
   totalStock: number;
+  unitName?: string;
 }
 
 export default function InventoryStatus() {

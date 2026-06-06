@@ -50,7 +50,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
-interface PurchaseReturnItemDto {
+interface SalesReturnItemDto {
   id: string;
   productId: string;
   productName: string;
@@ -60,22 +60,22 @@ interface PurchaseReturnItemDto {
   productBatchId?: string;
   batchNumber?: string;
   quantity: number;
-  purchaseRate: number;
+  rate: number;
   taxPercent: number;
   taxAmount: number;
   totalAmount: number;
   unitName?: string;
 }
 
-interface PurchaseReturnDto {
+interface SalesReturnDto {
   id: string;
   companyId: string;
   branchId: string;
-  supplierId: string;
-  supplierName: string;
+  customerId: string;
+  customerName: string;
   warehouseId: string;
   warehouseName: string;
-  purchaseInvoiceId?: string;
+  salesInvoiceId?: string;
   invoiceNo?: string;
   returnNo: string;
   returnDate: string;
@@ -84,7 +84,7 @@ interface PurchaseReturnDto {
   netAmount: number;
   remarks?: string;
   createdAt: string;
-  items: PurchaseReturnItemDto[];
+  items: SalesReturnItemDto[];
 }
 
 interface WarehouseDto {
@@ -92,13 +92,13 @@ interface WarehouseDto {
   name: string;
 }
 
-export default function ManagePurchaseReturn() {
+export default function ManageSalesReturn() {
   const navigate = useNavigate();
-  const { canView, canCreate, canDelete } = usePermissions('/purchase-return');
+  const { canView, canCreate, canDelete } = usePermissions('/sales-return');
   const user = useAppSelector((state) => state.auth.user);
 
   // Core States
-  const [returns, setReturns] = useState<PurchaseReturnDto[]>([]);
+  const [returns, setReturns] = useState<SalesReturnDto[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -126,19 +126,19 @@ export default function ManagePurchaseReturn() {
   const [pageSize, setPageSize] = useState(10);
 
   // View Modal State
-  const [viewingReturn, setViewingReturn] = useState<PurchaseReturnDto | null>(null);
+  const [viewingReturn, setViewingReturn] = useState<SalesReturnDto | null>(null);
   const [isLoadingView, setIsLoadingView] = useState(false);
 
   const fetchReturns = async () => {
     setIsLoading(true);
     try {
-      const response: any = await axiosClient.get('/PurchaseReturn');
+      const response: any = await axiosClient.get('/SalesReturn');
       if (response?.success) {
         setReturns(response.data || []);
       }
     } catch (e) {
-      console.error('Failed to load purchase returns', e);
-      toast.error('Failed to load purchase returns.');
+      console.error('Failed to load sales returns', e);
+      toast.error('Failed to load sales returns.');
     } finally {
       setIsLoading(false);
     }
@@ -168,13 +168,13 @@ export default function ManagePurchaseReturn() {
       if (user?.warehouseId && ret.warehouseId !== user.warehouseId) {
         return false;
       }
-      const supplierName = ret.supplierName || '';
+      const customerName = ret.customerName || '';
       const returnNo = ret.returnNo || '';
       const invoiceNo = ret.invoiceNo || '';
       const remarks = ret.remarks || '';
 
       const matchesSearch = 
-        supplierName.toLowerCase().includes(search.toLowerCase()) ||
+        customerName.toLowerCase().includes(search.toLowerCase()) ||
         returnNo.toLowerCase().includes(search.toLowerCase()) ||
         invoiceNo.toLowerCase().includes(search.toLowerCase()) ||
         remarks.toLowerCase().includes(search.toLowerCase());
@@ -225,15 +225,15 @@ export default function ManagePurchaseReturn() {
   }, [filteredReturns]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this purchase return? Deducted inventory quantities will be restored back to stock.')) return;
+    if (!confirm('Are you sure you want to delete this sales return? Restored warehouse stock will be deducted back.')) return;
 
     try {
-      const response: any = await axiosClient.delete(`/PurchaseReturn/${id}`);
+      const response: any = await axiosClient.delete(`/SalesReturn/${id}`);
       if (response?.success) {
-        toast.success('Purchase return deleted and stock deductions restored successfully!');
+        toast.success('Sales return deleted and stock increments rolled back successfully!');
         fetchReturns();
       } else {
-        toast.error(response?.message || 'Failed to delete purchase return.');
+        toast.error(response?.message || 'Failed to delete sales return.');
       }
     } catch (e: any) {
       console.error(e);
@@ -245,15 +245,15 @@ export default function ManagePurchaseReturn() {
     setIsLoadingView(true);
     setViewingReturn(null);
     try {
-      const response: any = await axiosClient.get(`/PurchaseReturn/${id}`);
+      const response: any = await axiosClient.get(`/SalesReturn/${id}`);
       if (response?.success) {
         setViewingReturn(response.data);
       } else {
-        toast.error('Failed to load purchase return details.');
+        toast.error('Failed to load sales return details.');
       }
     } catch (e) {
-      console.error('Failed to load purchase return', e);
-      toast.error('Failed to load purchase return details.');
+      console.error('Failed to load sales return', e);
+      toast.error('Failed to load sales return details.');
     } finally {
       setIsLoadingView(false);
     }
@@ -264,7 +264,7 @@ export default function ManagePurchaseReturn() {
       <Page>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <h2 className="text-2xl font-semibold mb-2">Access Denied</h2>
-          <p className="text-muted-foreground">You do not have permission to view purchase returns.</p>
+          <p className="text-muted-foreground">You do not have permission to view sales returns.</p>
         </div>
       </Page>
     );
@@ -274,12 +274,12 @@ export default function ManagePurchaseReturn() {
     <Page>
       <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Purchase Returns</h1>
-          <p className="text-muted-foreground mt-1">Manage invoice-wise product returns to suppliers and adjust stock levels.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Sales Returns</h1>
+          <p className="text-muted-foreground mt-1">Manage invoice-wise product returns from customers and adjust stock levels.</p>
         </div>
         {canCreate && (
-          <Button onClick={() => navigate('/purchase-return/create')} className="gap-1.5 shrink-0 h-10">
-            <Plus className="h-4.5 w-4.5" /> New Purchase Return
+          <Button onClick={() => navigate('/sales-return/create')} className="gap-1.5 shrink-0 h-10">
+            <Plus className="h-4.5 w-4.5" /> New Sales Return
           </Button>
         )}
       </div>
@@ -325,7 +325,7 @@ export default function ManagePurchaseReturn() {
             <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-zinc-400" />
             <Input
               type="search"
-              placeholder="Search Return No / Supplier / Invoice..."
+              placeholder="Search Return No / Customer / Invoice..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9 w-full"
@@ -398,7 +398,7 @@ export default function ManagePurchaseReturn() {
                 <TableHead className="w-[60px]">Sr.</TableHead>
                 <TableHead className="w-[130px]">Return Date</TableHead>
                 <TableHead className="w-[160px]">Return No.</TableHead>
-                <TableHead className="w-[200px]">Supplier</TableHead>
+                <TableHead className="w-[200px]">Customer</TableHead>
                 <TableHead className="w-[160px]">Warehouse</TableHead>
                 <TableHead className="w-[160px]">Linked Invoice</TableHead>
                 <TableHead className="w-[130px] text-right font-semibold text-zinc-900 dark:text-zinc-50">Returned Value</TableHead>
@@ -415,7 +415,7 @@ export default function ManagePurchaseReturn() {
               ) : paginatedReturns.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                    No purchase returns found.
+                    No sales returns found.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -431,7 +431,7 @@ export default function ManagePurchaseReturn() {
                     <TableCell>
                       <div className="font-semibold text-sm">{ret.returnNo}</div>
                     </TableCell>
-                    <TableCell className="text-sm font-medium">{ret.supplierName || 'Unknown Supplier'}</TableCell>
+                    <TableCell className="text-sm font-medium">{ret.customerName || 'Unknown Customer'}</TableCell>
                     <TableCell className="text-xs">
                       <div className="flex items-center gap-1 text-zinc-700 dark:text-zinc-300">
                         <Warehouse className="h-3.5 w-3.5 opacity-60" />
@@ -445,7 +445,7 @@ export default function ManagePurchaseReturn() {
                         <span className="text-zinc-400 italic font-normal text-xs">Ad-hoc Return</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm font-bold text-red-600 dark:text-red-400">
+                    <TableCell className="text-right font-mono text-sm font-bold text-red-650 dark:text-red-400">
                       ₹{ret.netAmount.toFixed(2)}
                     </TableCell>
                     <TableCell className="text-center">
@@ -564,7 +564,7 @@ export default function ManagePurchaseReturn() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold tracking-tight text-foreground">
-                    {viewingReturn ? `Purchase Return: ${viewingReturn.returnNo}` : 'Loading...'}
+                    {viewingReturn ? `Sales Return: ${viewingReturn.returnNo}` : 'Loading...'}
                   </h2>
                   {viewingReturn && (
                     <p className="text-sm text-muted-foreground mt-0.5">
@@ -586,7 +586,7 @@ export default function ManagePurchaseReturn() {
               {isLoadingView && !viewingReturn ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4">
                   <Loader2 className="h-10 w-10 animate-spin text-red-500" />
-                  <span className="text-sm text-muted-foreground">Loading purchase return details...</span>
+                  <span className="text-sm text-muted-foreground">Loading sales return details...</span>
                 </div>
               ) : viewingReturn ? (
                 <div className="p-7 space-y-7">
@@ -595,9 +595,9 @@ export default function ManagePurchaseReturn() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-muted/30 rounded-xl p-4 border border-border/60">
                       <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
-                        <User className="h-3.5 w-3.5" /> Supplier
+                        <User className="h-3.5 w-3.5" /> Customer
                       </div>
-                      <div className="text-base font-bold text-foreground leading-tight">{viewingReturn.supplierName || '—'}</div>
+                      <div className="text-base font-bold text-foreground leading-tight">{viewingReturn.customerName || '—'}</div>
                     </div>
 
                     <div className="bg-muted/30 rounded-xl p-4 border border-border/60">
@@ -677,7 +677,7 @@ export default function ManagePurchaseReturn() {
                                 <td className="px-4 py-3.5 text-right font-mono font-bold text-red-650 dark:text-red-400 whitespace-nowrap">
                                   {item.quantity} <span className="text-[10px] text-muted-foreground font-sans font-medium">{item.unitName}</span>
                                 </td>
-                                <td className="px-4 py-3.5 text-right font-mono text-foreground">₹{Number(item.purchaseRate).toFixed(2)}</td>
+                                <td className="px-4 py-3.5 text-right font-mono text-foreground">₹{Number(item.rate).toFixed(2)}</td>
                                 <td className="px-4 py-3.5 text-right font-mono text-blue-600 dark:text-blue-400">{Number(item.taxPercent || 0).toFixed(1)}%</td>
                                 <td className="px-4 py-3.5 text-right font-mono font-bold text-foreground">₹{Number(item.totalAmount || 0).toFixed(2)}</td>
                               </tr>

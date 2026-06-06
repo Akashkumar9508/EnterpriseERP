@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import axiosClient from '@/Services/axiosClient';
+import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 
 interface InvoiceItem {
@@ -43,12 +44,11 @@ interface InvoiceItem {
   variantName?: string;
   productBatchId?: string;
   batchNumber?: string;
-  quantity: number;
-  freeQuantity: number;
-  purchaseRate: number;
-  taxPercent: number;
-  taxAmount: number;
-  totalAmount: number;
+  qty: number;
+  rate: number;
+  taxPercentage?: number;
+  taxAmount?: number;
+  amount?: number;
   unitName?: string;
 }
 
@@ -56,8 +56,8 @@ interface Invoice {
   id: string;
   companyId: string;
   branchId: string;
-  supplierId: string;
-  supplierName: string;
+  customerId: string;
+  customerName: string;
   warehouseId: string;
   warehouseName: string;
   invoiceNo: string;
@@ -81,15 +81,16 @@ interface ReturnItem {
   previouslyReturnedQty: number;
   maxReturnableQty: number;
   returnQty: number; // User input
-  purchaseRate: number;
+  rate: number;
   taxPercent: number;
   taxAmount: number;
   totalAmount: number;
   unitName?: string;
 }
 
-export default function CreatePurchaseReturn() {
+export default function CreateSalesReturn() {
   const navigate = useNavigate();
+  const user = useAppSelector((state) => state.auth.user);
 
   // Loading States
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -101,7 +102,7 @@ export default function CreatePurchaseReturn() {
   const [invoiceDetail, setInvoiceDetail] = useState<Invoice | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-  // Purchase Invoice Selection Dialog states
+  // Sales Invoice Selection Dialog states
   const [selectingInvoice, setSelectingInvoice] = useState(false);
   const [invoiceSearchText, setInvoiceSearchText] = useState('');
   const [activeInvoiceSearchIndex, setActiveInvoiceSearchIndex] = useState(-1);
@@ -113,7 +114,7 @@ export default function CreatePurchaseReturn() {
       if (!term) return true;
       return (
         inv.invoiceNo.toLowerCase().includes(term) ||
-        inv.supplierName.toLowerCase().includes(term)
+        inv.customerName.toLowerCase().includes(term)
       );
     });
   }, [invoices, invoiceSearchText]);
@@ -170,34 +171,37 @@ export default function CreatePurchaseReturn() {
   // Items to return
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
 
-  // Fetch posted invoices to calculate quantities
+  // Fetch posted sales invoices to calculate quantities
   useEffect(() => {
     const loadInitData = async () => {
+      if (!user?.companyId) return;
       setIsLoadingInvoices(true);
       try {
-        const resInvoices: any = await axiosClient.get('/PurchaseInvoice');
+        const resInvoices: any = await axiosClient.get('/SalesInvoice', {
+          params: { companyId: user.companyId }
+        });
 
         if (resInvoices?.success) {
-          // Keep only POSTED invoices (status = 2)
-          const postedInvoices = (resInvoices.data || []).filter((inv: Invoice) => inv.status === 2);
+          // Keep only POSTED/Partially Paid/Partially Returned invoices (status = 2, 4, or 6)
+          const postedInvoices = (resInvoices.data || []).filter((inv: Invoice) => inv.status === 2 || inv.status === 4 || inv.status === 6);
           setInvoices(postedInvoices);
         }
       } catch (err) {
         console.error('Failed to load initial data', err);
-        toast.error('Failed to load purchase invoices.');
+        toast.error('Failed to load sales invoices.');
       } finally {
         setIsLoadingInvoices(false);
       }
     };
     loadInitData();
-  }, []);
+  }, [user?.companyId]);
 
   // Generate unique Return Number
   useEffect(() => {
     if (selectedInvoiceId && invoiceDetail) {
       const randomId = Math.floor(1000 + Math.random() * 9000);
       const dateStr = returnDate.replace(/-/g, '');
-      setReturnNo(`PR-${dateStr}-${randomId}`);
+      setReturnNo(`SR-${dateStr}-${randomId}`);
     } else {
       setReturnNo('');
     }
@@ -213,8 +217,8 @@ export default function CreatePurchaseReturn() {
     setIsLoadingDetail(true);
     try {
       const [res, qtyRes] = await Promise.all([
-        axiosClient.get(`/PurchaseInvoice/${invoiceId}`),
-        axiosClient.get(`/PurchaseReturn/returned-qty/${invoiceId}`)
+        axiosClient.get(`/SalesInvoice/${invoiceId}`),
+        axiosClient.get(`/SalesReturn/returned-qty/${invoiceId}`)
       ]) as [any, any];
 
       if (res?.success && res.data) {
@@ -233,22 +237,22 @@ export default function CreatePurchaseReturn() {
             (rq.productBatchId === invItem.productBatchId || (!rq.productBatchId && !invItem.productBatchId))
           );
           const previouslyReturnedQty = returnedItem ? returnedItem.returnedQuantity : 0;
-          const maxReturnableQty = Math.max(0, invItem.quantity - previouslyReturnedQty);
+          const maxReturnableQty = Math.max(0, invItem.qty - previouslyReturnedQty);
 
           return {
             productId: invItem.productId,
-            productName: invItem.productName,
-            productCode: invItem.productCode,
+            productName: invItem.productName || '',
+            productCode: invItem.productCode || '',
             productVariantId: invItem.productVariantId,
             variantName: invItem.variantName,
             productBatchId: invItem.productBatchId,
             batchNumber: invItem.batchNumber,
-            invoiceQty: invItem.quantity,
+            invoiceQty: invItem.qty,
             previouslyReturnedQty,
             maxReturnableQty,
             returnQty: 0, // start at 0
-            purchaseRate: invItem.purchaseRate,
-            taxPercent: invItem.taxPercent,
+            rate: invItem.rate,
+            taxPercent: invItem.taxPercentage || 0,
             taxAmount: 0,
             totalAmount: 0,
             unitName: invItem.unitName
@@ -283,7 +287,7 @@ export default function CreatePurchaseReturn() {
     }
 
     // Recalculate totals for this line
-    const subtotal = item.returnQty * item.purchaseRate;
+    const subtotal = item.returnQty * item.rate;
     item.taxAmount = (subtotal * item.taxPercent) / 100;
     item.totalAmount = subtotal + item.taxAmount;
 
@@ -299,7 +303,7 @@ export default function CreatePurchaseReturn() {
 
     returnItems.forEach((item) => {
       if (item.returnQty > 0) {
-        subtotal += item.returnQty * item.purchaseRate;
+        subtotal += item.returnQty * item.rate;
         tax += item.taxAmount;
         net += item.totalAmount;
         activeReturnLinesCount++;
@@ -311,7 +315,7 @@ export default function CreatePurchaseReturn() {
 
   const handleSubmit = async () => {
     if (!selectedInvoiceId || !invoiceDetail) {
-      toast.error('Please select a purchase invoice to return items from.');
+      toast.error('Please select a sales invoice to return items from.');
       return;
     }
 
@@ -333,7 +337,7 @@ export default function CreatePurchaseReturn() {
         productVariantId: item.productVariantId,
         productBatchId: item.productBatchId,
         quantity: item.returnQty,
-        purchaseRate: item.purchaseRate,
+        rate: item.rate,
         taxPercent: item.taxPercent,
         taxAmount: item.taxAmount,
         totalAmount: item.totalAmount
@@ -342,9 +346,9 @@ export default function CreatePurchaseReturn() {
     const payload = {
       companyId: invoiceDetail.companyId,
       branchId: invoiceDetail.branchId,
-      supplierId: invoiceDetail.supplierId,
+      customerId: invoiceDetail.customerId,
       warehouseId: invoiceDetail.warehouseId,
-      purchaseInvoiceId: selectedInvoiceId,
+      salesInvoiceId: selectedInvoiceId,
       returnNo: returnNo,
       returnDate: returnDate,
       remarks: remarks,
@@ -356,12 +360,12 @@ export default function CreatePurchaseReturn() {
 
     setIsSubmitting(true);
     try {
-      const response: any = await axiosClient.post('/PurchaseReturn', payload);
+      const response: any = await axiosClient.post('/SalesReturn', payload);
       if (response?.success) {
-        toast.success(response.message || 'Purchase return recorded and stock deducted successfully!');
-        navigate('/purchase-return');
+        toast.success(response.message || 'Sales return recorded and stock incremented successfully!');
+        navigate('/sales-return');
       } else {
-        toast.error(response?.message || 'Failed to record purchase return.');
+        toast.error(response?.message || 'Failed to record sales return.');
       }
     } catch (err: any) {
       console.error(err);
@@ -380,13 +384,13 @@ export default function CreatePurchaseReturn() {
             variant="outline" 
             size="icon" 
             className="h-9 w-9 shrink-0" 
-            onClick={() => navigate('/purchase-return')}
+            onClick={() => navigate('/sales-return')}
           >
             <ArrowLeft className="h-4.5 w-4.5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Record Purchase Return</h1>
-            <p className="text-muted-foreground text-xs mt-0.5">Deduct items from warehouse stock and adjust outstanding supplier balances.</p>
+            <h1 className="text-2xl font-bold tracking-tight">Record Sales Return</h1>
+            <p className="text-muted-foreground text-xs mt-0.5">Return items back to warehouse stock and adjust outstanding customer balances.</p>
           </div>
         </div>
         
@@ -415,9 +419,9 @@ export default function CreatePurchaseReturn() {
 
             <div className="space-y-4">
               
-              {/* Select Purchase Invoice */}
+              {/* Select Sales Invoice */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-500">Select Purchase Invoice</label>
+                <label className="text-xs font-semibold text-zinc-500">Select Sales Invoice</label>
                 {invoiceDetail ? (
                   <div className="flex items-center justify-between border border-border bg-card rounded-md p-3">
                     <div className="min-w-0 flex-1 pr-2">
@@ -425,7 +429,7 @@ export default function CreatePurchaseReturn() {
                         {invoiceDetail.invoiceNo}
                       </span>
                       <span className="text-xs text-muted-foreground block truncate">
-                        {invoiceDetail.supplierName} • ₹{invoiceDetail.netAmount.toFixed(2)}
+                        {invoiceDetail.customerName} • ₹{invoiceDetail.netAmount.toFixed(2)}
                       </span>
                     </div>
                     <Button 
@@ -473,7 +477,7 @@ export default function CreatePurchaseReturn() {
                   type="text" 
                   value={returnNo}
                   onChange={(e) => setReturnNo(e.target.value)}
-                  placeholder="Auto-generated PR No."
+                  placeholder="Auto-generated SR No."
                   className="h-10 font-mono font-semibold"
                 />
               </div>
@@ -491,7 +495,7 @@ export default function CreatePurchaseReturn() {
 
               {/* Warehouse (Read-Only) */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5"><Warehouse className="h-3 w-3" /> Source Warehouse (Read-Only)</label>
+                <label className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5"><Warehouse className="h-3 w-3" /> Target Warehouse (Read-Only)</label>
                 <Input 
                   type="text" 
                   value={invoiceDetail?.warehouseName || '—'} 
@@ -500,12 +504,12 @@ export default function CreatePurchaseReturn() {
                 />
               </div>
 
-              {/* Supplier (Read-Only) */}
+              {/* Customer (Read-Only) */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5"><User className="h-3 w-3" /> Supplier (Read-Only)</label>
+                <label className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5"><User className="h-3 w-3" /> Customer (Read-Only)</label>
                 <Input 
                   type="text" 
-                  value={invoiceDetail?.supplierName || '—'} 
+                  value={invoiceDetail?.customerName || '—'} 
                   readOnly 
                   className="h-10 bg-zinc-50 dark:bg-zinc-900/30 text-zinc-650"
                 />
@@ -517,7 +521,7 @@ export default function CreatePurchaseReturn() {
                 <textarea 
                   value={remarks}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRemarks(e.target.value)}
-                  placeholder="E.g. Damaged during shipping, incorrect sizing, surplus stock"
+                  placeholder="E.g. Customer returned items, damaged on arrival, incorrect product"
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-800"
                 />
               </div>
@@ -542,7 +546,7 @@ export default function CreatePurchaseReturn() {
               <div className="flex-1 flex flex-col items-center justify-center text-center p-10 border border-dashed border-zinc-200/80 rounded-xl dark:border-white/5 bg-zinc-50/30 dark:bg-zinc-900/5">
                 <ArrowLeftRight className="h-10 w-10 text-zinc-400 mb-3" />
                 <h3 className="font-semibold text-sm mb-1">No Invoice Selected</h3>
-                <p className="text-xs text-muted-foreground max-w-xs">Please select a purchase invoice on the left to load its products for returns.</p>
+                <p className="text-xs text-muted-foreground max-w-xs">Please select a sales invoice on the left to load its products for returns.</p>
               </div>
             ) : returnItems.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center">
@@ -610,7 +614,7 @@ export default function CreatePurchaseReturn() {
                               <span className="text-[9px] text-red-550 block mt-0.5 text-right font-semibold">Fully Returned</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-xs">₹{item.purchaseRate.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">₹{item.rate.toFixed(2)}</TableCell>
                           <TableCell className="text-right font-mono text-xs font-bold text-zinc-900 dark:text-zinc-50">
                             ₹{item.totalAmount.toFixed(2)}
                           </TableCell>
@@ -653,16 +657,16 @@ export default function CreatePurchaseReturn() {
 
       </div>
 
-      {/* Searchable Purchase Invoice Dialog */}
+      {/* Searchable Sales Invoice Dialog */}
       <Dialog open={selectingInvoice} onOpenChange={setSelectingInvoice}>
         <DialogContent className="max-w-md bg-popover border border-border">
           <DialogHeader>
-            <DialogTitle>Search Purchase Invoice</DialogTitle>
+            <DialogTitle>Search Sales Invoice</DialogTitle>
           </DialogHeader>
           <div className="relative mt-2">
             <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-muted-foreground" />
             <Input
-              placeholder="Search by invoice no or supplier name..."
+              placeholder="Search by invoice no or customer name..."
               value={invoiceSearchText}
               onChange={(e) => setInvoiceSearchText(e.target.value)}
               onKeyDown={handleInvoiceSearchKeyDown}
@@ -687,7 +691,7 @@ export default function CreatePurchaseReturn() {
                 >
                   <div className="min-w-0 flex-1 pr-3">
                     <div className="font-bold text-sm font-mono text-zinc-900 dark:text-zinc-100 truncate">{inv.invoiceNo}</div>
-                    <div className="text-xs text-muted-foreground truncate mt-0.5">{inv.supplierName}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">{inv.customerName}</div>
                     <div className="text-[10px] text-zinc-400 mt-0.5">
                       Date: {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                     </div>
