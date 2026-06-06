@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, Home } from 'lucide-react';
 import { Page } from '@/components/ui/page';
@@ -45,6 +45,7 @@ import type { CompanyDto } from '@/types/CompanyDto';
 import type { BranchDto } from '@/types/BranchDto';
 
 export default function ManageWarehouse() {
+  const isMounted = useRef(false);
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/warehouse');
   const user = useAppSelector((state) => state.auth.user);
 
@@ -142,6 +143,10 @@ export default function ManageWarehouse() {
   }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {

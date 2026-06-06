@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, Binary } from 'lucide-react';
 import { Page } from '@/components/ui/page';
@@ -43,6 +43,7 @@ import type { HSNCodeDto } from '@/types/HSNCodeDto';
 import type { TaxProfileDto } from '@/types/TaxProfileDto';
 
 export default function ManageHSNCode() {
+  const isMounted = useRef(false);
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/hsncode');
 
   const [hsnCodes, setHsnCodes] = useState<HSNCodeDto[]>([]);
@@ -126,6 +127,10 @@ export default function ManageHSNCode() {
   }, [canView]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {

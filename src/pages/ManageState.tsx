@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, Map } from 'lucide-react';
 import { Page } from '@/components/ui/page';
@@ -43,6 +43,7 @@ import { Input } from '@/components/ui/input';
 import type { StateDto } from '@/types/StateDto';
 
 export default function ManageState() {
+  const isMounted = useRef(false);
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-state');
 
   const [states, setStates] = useState<StateDto[]>([]);
@@ -98,6 +99,10 @@ export default function ManageState() {
   }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {

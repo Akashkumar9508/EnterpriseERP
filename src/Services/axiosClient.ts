@@ -12,6 +12,7 @@ const axiosClient = axios.create({
   baseURL: `${API_BASE}/api`,
 })
 
+
 // 🔹 Request Interceptor — attaches JWT token to every request
 axiosClient.interceptors.request.use(
   (config) => {
@@ -56,6 +57,7 @@ axiosClient.interceptors.response.use(
       message,
     })
   }
+
 )
 
 export default axiosClient

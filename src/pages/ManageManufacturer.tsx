@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, Factory } from 'lucide-react';
 import { Page } from '@/components/ui/page';
@@ -43,6 +43,7 @@ import { Input } from '@/components/ui/input';
 import type { ManufacturerDto } from '@/types/ManufacturerDto';
 
 export default function ManageManufacturer() {
+  const isMounted = useRef(false);
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/manufacturer');
   const user = useAppSelector((state) => state.auth.user);
 
@@ -97,6 +98,10 @@ export default function ManageManufacturer() {
   }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {
