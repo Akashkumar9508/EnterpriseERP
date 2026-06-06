@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, GitBranch, Building } from 'lucide-react';
 import { Page } from '@/components/ui/page';
@@ -44,6 +44,7 @@ import type { BranchDto } from '@/types/BranchDto';
 import type { CompanyDto } from '@/types/CompanyDto';
 
 export default function ManageBranch() {
+  const isMounted = useRef(false);
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/branch');
   const user = useAppSelector((state) => state.auth.user);
 
@@ -115,6 +116,10 @@ export default function ManageBranch() {
   }, [canView, pageNumber, pageSize]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {

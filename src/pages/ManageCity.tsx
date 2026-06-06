@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { Pencil, Trash2, Plus, Loader2, MapPin } from 'lucide-react';
 import { Page } from '@/components/ui/page';
@@ -44,6 +44,7 @@ import type { CityDto } from '@/types/CityDto';
 import type { StateDto } from '@/types/StateDto';
 
 export default function ManageCity() {
+  const isMounted = useRef(false);
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/manage-city');
 
   const [cities, setCities] = useState<CityDto[]>([]);
@@ -123,6 +124,10 @@ export default function ManageCity() {
   }, [canView]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {

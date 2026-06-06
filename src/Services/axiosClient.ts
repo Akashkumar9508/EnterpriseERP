@@ -3,14 +3,15 @@ import { store } from "../store/store"
 import { setLicenseExpired } from "../store/slices/authSlice"
 
 // const API_BASE = "https://localhost:44387";
-// export const API_BASE = "http://localhost:5262"
- export const API_BASE = "https://reactapi.advancedmedicentre.com"
+export const API_BASE = "http://localhost:5262"
+//  export const API_BASE = "https://reactapi.advancedmedicentre.com"
 
 export const IMAGE_BASE = `${API_BASE}/uploads/`
 
 const axiosClient = axios.create({
   baseURL: `${API_BASE}/api`,
 })
+
 
 // 🔹 Request Interceptor — attaches JWT token to every request
 axiosClient.interceptors.request.use(

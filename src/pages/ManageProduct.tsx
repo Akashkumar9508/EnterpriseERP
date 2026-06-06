@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Trash2, Plus, Loader2, Package, Tag, Layers, Percent, Settings2, QrCode, Printer, Barcode } from 'lucide-react';
@@ -53,6 +53,7 @@ import type { GstDto } from '@/types/GstDto';
 import type { UnitDto } from '@/types/UnitDto';
 
 export default function ManageProduct() {
+  const isMounted = useRef(false);
   const navigate = useNavigate();
   const { canView, canCreate, canEdit, canDelete } = usePermissions('/product');
   const user = useAppSelector((state) => state.auth.user);
@@ -515,6 +516,10 @@ export default function ManageProduct() {
   }, [canView]);
 
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     if (canView) {
       const delayDebounceFn = setTimeout(() => {
         if (pageNumber === 1) {
