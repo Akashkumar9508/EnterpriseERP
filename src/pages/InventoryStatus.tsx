@@ -51,6 +51,8 @@ interface GroupedProductStock {
   stocks: Record<string, number>; // Maps warehouseId -> currentStock
   totalStock: number;
   unitName?: string;
+  batchNo?: string;
+  expiryDate?: string;
 }
 
 export default function InventoryStatus() {
@@ -125,8 +127,10 @@ export default function InventoryStatus() {
         return;
       }
       
-      if (!map.has(item.productId)) {
-        map.set(item.productId, {
+      const groupKey = `${item.productId}_${item.batchNo || ''}`;
+      
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
           productId: item.productId,
           productName: item.productName,
           productCode: item.productCode,
@@ -134,11 +138,13 @@ export default function InventoryStatus() {
           minStock: item.minStock,
           stocks: {},
           totalStock: 0,
-          unitName: item.unitName
+          unitName: item.unitName,
+          batchNo: item.batchNo,
+          expiryDate: item.expiryDate
         });
       }
       
-      const entry = map.get(item.productId)!;
+      const entry = map.get(groupKey)!;
       entry.stocks[item.warehouseId] = item.currentStock;
     });
 
@@ -162,7 +168,8 @@ export default function InventoryStatus() {
       const matchesSearch = 
         item.productName.toLowerCase().includes(searchLower) ||
         item.productCode.toLowerCase().includes(searchLower) ||
-        (item.sku && item.sku.toLowerCase().includes(searchLower));
+        (item.sku && item.sku.toLowerCase().includes(searchLower)) ||
+        (item.batchNo && item.batchNo.toLowerCase().includes(searchLower));
 
       // 2. Category match (Note: requires matching product category, we can add a check if needed, but since we filter primarily on stock status and search, we filter on those)
       
@@ -369,15 +376,28 @@ export default function InventoryStatus() {
                 paginatedStocks.map((item, index) => {
                   const isOut = item.totalStock <= 0;
                   const isLow = !isOut && item.totalStock < item.minStock;
+                  const key = `${item.productId}_${item.batchNo || ''}`;
                   return (
-                    <TableRow key={item.productId} className={isOut ? 'bg-red-500/5' : isLow ? 'bg-amber-500/5' : ''}>
+                    <TableRow key={key} className={isOut ? 'bg-red-500/5' : isLow ? 'bg-amber-500/5' : ''}>
                       <TableCell className="font-mono text-xs">{(pageNumber - 1) * pageSize + index + 1}</TableCell>
                       <TableCell>
-                        <div className="font-semibold text-sm">{item.productName}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5 flex gap-2 items-center">
+                        <div className="font-semibold text-sm flex items-center gap-2 flex-wrap">
+                          <span>{item.productName}</span>
+                          {item.batchNo && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-955/20 dark:text-amber-450 border border-amber-200 dark:border-amber-900/50">
+                              Batch: {item.batchNo}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap gap-2 items-center">
                           <span>Code: {item.productCode}</span>
                           {item.sku && <span>• SKU: {item.sku}</span>}
                           {item.unitName && <span className="bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-sm text-zinc-600 dark:text-zinc-400 font-medium font-sans">Unit: {item.unitName}</span>}
+                          {item.expiryDate && (
+                            <span className="text-zinc-500 dark:text-zinc-400">
+                              • Expiry: {new Date(item.expiryDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-muted-foreground whitespace-nowrap">

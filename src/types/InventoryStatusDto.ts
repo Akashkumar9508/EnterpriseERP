@@ -8,4 +8,7 @@ export interface InventoryStatusDto {
   warehouseName: string;
   currentStock: number;
   unitName?: string;
+  productBatchId?: string;
+  batchNo?: string;
+  expiryDate?: string;
 }
