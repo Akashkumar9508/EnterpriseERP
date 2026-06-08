@@ -326,6 +326,17 @@ export default function CreateSalesInvoice() {
     return map
   }, [inventoryStatus, warehouseId])
 
+  const getBatchStock = (productId: string, batchId: string | null) => {
+    if (!warehouseId) return 0
+    const match = inventoryStatus.find(
+      (inv: any) =>
+        inv.productId === productId &&
+        inv.warehouseId === warehouseId &&
+        (batchId ? inv.productBatchId === batchId : !inv.productBatchId)
+    )
+    return match ? match.currentStock : 0
+  }
+
   const isDecimalAllowedForProduct = (productId: string): boolean => {
     const product = products.find((p) => p.id === productId)
     if (!product || !product.unitId) return false
@@ -950,16 +961,17 @@ export default function CreateSalesInvoice() {
     // Validate stock limits (prevent negative inventory)
     const stockOutLimitItem = items.find(
       (item) => {
-        const availableStock = warehouseStockMap[item.productId] || 0
+        const availableStock = getBatchStock(item.productId, item.productBatchId || null)
         const itemBaseQty = Number(item.qty) * (item.conversionFactor || 1.0)
         return itemBaseQty > availableStock
       }
     )
     if (stockOutLimitItem) {
       const prodName = products.find(p => p.id === stockOutLimitItem.productId)?.name || "Product"
-      const availableStock = warehouseStockMap[stockOutLimitItem.productId] || 0
+      const batchName = stockOutLimitItem.batchNumber ? ` (Batch: ${stockOutLimitItem.batchNumber})` : ""
+      const availableStock = getBatchStock(stockOutLimitItem.productId, stockOutLimitItem.productBatchId || null)
       toast.error(
-        `Quantity for "${prodName}" (${stockOutLimitItem.qty} ${stockOutLimitItem.unitSymbol || "pcs"}) exceeds available stock (${availableStock} base units available in warehouse).`
+        `Quantity for "${prodName}"${batchName} (${stockOutLimitItem.qty} ${stockOutLimitItem.unitSymbol || "pcs"}) exceeds available stock (${availableStock} base units available in warehouse).`
       )
       return
     }
@@ -1460,14 +1472,15 @@ export default function CreateSalesInvoice() {
                             disabled={!item.productId || itemBatches.length === 0}
                             className="h-8 w-full cursor-pointer rounded-md border border-zinc-200 bg-white px-1.5 text-xs text-zinc-900 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
                           >
-                            <option value="">No Batch</option>
+                            <option value="">No Batch (Avl: {getBatchStock(item.productId, null)})</option>
                             {itemBatches.map((b) => {
                               const expStr = b.expiryDate
                                 ? new Date(b.expiryDate).toLocaleDateString()
                                 : "No Expiry"
+                              const avlQty = getBatchStock(item.productId, b.id || null)
                               return (
                                 <option key={b.id} value={b.id}>
-                                  {b.batchNo} ({expStr} - MRP: ₹{b.mrp})
+                                  {b.batchNo} ({expStr} - Avl: {avlQty} - MRP: ₹{b.mrp})
                                 </option>
                               )
                             })}
