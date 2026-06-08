@@ -1477,7 +1477,7 @@ export default function CreateSalesInvoice() {
                               const expStr = b.expiryDate
                                 ? new Date(b.expiryDate).toLocaleDateString()
                                 : "No Expiry"
-                              const avlQty = getBatchStock(item.productId, b.id)
+                              const avlQty = getBatchStock(item.productId, b.id || null)
                               return (
                                 <option key={b.id} value={b.id}>
                                   {b.batchNo} ({expStr} - Avl: {avlQty} - MRP: ₹{b.mrp})
