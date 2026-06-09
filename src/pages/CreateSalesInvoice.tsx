@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Check,
+  X,
 } from "lucide-react"
 import { Page } from "@/components/ui/page"
 import { Section } from "@/components/ui/section"
@@ -351,6 +352,40 @@ export default function CreateSalesInvoice() {
     }
   }, [selectingProductForIndex])
 
+  // Debounced search for Customer selection
+  useEffect(() => {
+    const selectedCustomer = customers.find(c => c.id === customerId)
+    if (!isCustomerDropdownOpen && selectedCustomer && selectedCustomer.name === customerSearchText) {
+      return
+    }
+
+    const delayDebounceFn = setTimeout(() => {
+      const fetchCustomerSearch = async () => {
+        try {
+          const res: any = await axiosClient.get("/Customer", {
+            params: { search: customerSearchText, pageNumber: 1, pageSize: 30 }
+          })
+          if (res?.success) {
+            const results = res.data?.items || res.data || []
+            setCustomers(prev => {
+              const currentSelected = prev.find(c => c.id === customerId)
+              const merged = [...results]
+              if (currentSelected && !merged.some(c => c.id === customerId)) {
+                merged.push(currentSelected)
+              }
+              return merged
+            })
+          }
+        } catch (error) {
+          console.error("Failed to search customers", error)
+        }
+      }
+      fetchCustomerSearch()
+    }, 300)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [customerSearchText, isCustomerDropdownOpen, customerId])
+
   // Debounced search for product selection dialog
   useEffect(() => {
     if (selectingProductForIndex === null) return
@@ -380,7 +415,7 @@ export default function CreateSalesInvoice() {
       setIsLoadingDeps(true)
       try {
         const [resCust, resWh, resProd, resVar, resTax, resStock, resUnit] = await Promise.all([
-          axiosClient.get("/Customer", { params: { pageNumber: 1, pageSize: 10000 } }),
+          axiosClient.get("/Customer", { params: { pageNumber: 1, pageSize: 30 } }),
           axiosClient.get("/Warehouse", { params: { pageNumber: 1, pageSize: 10000 } }),
           axiosClient.get("/Product", { params: { pageNumber: 1, pageSize: 30 } }),
           axiosClient.get("/ProductVariant"),
@@ -459,6 +494,15 @@ export default function CreateSalesInvoice() {
         if (response?.success && response.data) {
           const inv = response.data
           setCustomerId(inv.customerId || "")
+          if (inv.customerId) {
+            setCustomers((prev) => {
+              if (prev.some((c) => c.id === inv.customerId)) return prev
+              return [
+                ...prev,
+                { id: inv.customerId, name: inv.customerName || "Selected Customer" },
+              ]
+            })
+          }
           setWarehouseId(inv.warehouseId || "")
           setInvoiceNo(inv.invoiceNo || "")
           setReferenceNo(inv.referenceNo || "")
@@ -625,6 +669,20 @@ export default function CreateSalesInvoice() {
     // Default select the nearest-expiry batch if any exists
     const defaultBatch = batches.length > 0 ? batches[0] : null
 
+    // Determine initial rate based on:
+    // 1. defaultBatch.salesRate > 0
+    // 2. defaultBatch.mrp > 0
+    // 3. product.mrp > 0
+    // 4. product.salesRate || 0
+    let initialRate = product.salesRate || 0
+    if (defaultBatch && defaultBatch.salesRate && defaultBatch.salesRate > 0) {
+      initialRate = defaultBatch.salesRate
+    } else if (defaultBatch && defaultBatch.mrp && defaultBatch.mrp > 0) {
+      initialRate = defaultBatch.mrp
+    } else if (product.mrp && product.mrp > 0) {
+      initialRate = product.mrp
+    }
+
     const updated = [...items]
     updated[index] = {
       ...updated[index],
@@ -633,7 +691,7 @@ export default function CreateSalesInvoice() {
       productBatchId: defaultBatch?.id || "",
       batchNumber: defaultBatch?.batchNo || "",
       expiryDate: defaultBatch?.expiryDate ? defaultBatch.expiryDate.split("T")[0] : "",
-      rate: product.salesRate || 0,
+      rate: initialRate,
       taxPercentage: defaultTaxRate,
       qty: 1,
       discountPercentage: 0,
@@ -653,17 +711,45 @@ export default function CreateSalesInvoice() {
     const product = products.find(p => p.id === item.productId)
     if (!product) return
 
+    // Get the base rate for base unit
+    let baseRate = product.salesRate || 0
+    if (item.productBatchId) {
+      const batches = productBatches[item.productId] || []
+      const batch = batches.find(b => b.id === item.productBatchId)
+      if (batch && batch.salesRate && batch.salesRate > 0) {
+        baseRate = batch.salesRate
+      } else if (batch && batch.mrp && batch.mrp > 0) {
+        baseRate = batch.mrp
+      } else if (product.mrp && product.mrp > 0) {
+        baseRate = product.mrp
+      }
+    } else if (product.mrp && product.mrp > 0) {
+      baseRate = product.mrp
+    }
+
     let conversionFactor = 1.0
-    let rate = product.salesRate || 0
+    let rate = baseRate
 
     if (unitId === product.unitId) {
       conversionFactor = 1.0
-      rate = product.salesRate || 0
+      rate = baseRate
     } else {
       const rule = product.alternativeUnits?.find(c => c.alternativeUnitId === unitId)
       if (rule) {
         conversionFactor = rule.conversionFactor
-        rate = rule.salesRate !== undefined && rule.salesRate !== null ? rule.salesRate : (product.salesRate || 0) * conversionFactor
+        // If batch is selected, we scale the batch MRP by the conversion factor.
+        // Otherwise, we check if rule specifies MRP/salesRate, otherwise scale.
+        if (item.productBatchId) {
+          rate = baseRate * conversionFactor
+        } else {
+          if (product.mrp && product.mrp > 0 && rule.mrp !== undefined && rule.mrp !== null) {
+            rate = rule.mrp
+          } else if (rule.salesRate !== undefined && rule.salesRate !== null) {
+            rate = rule.salesRate
+          } else {
+            rate = baseRate * conversionFactor
+          }
+        }
       }
     }
 
@@ -698,21 +784,40 @@ export default function CreateSalesInvoice() {
     updated[index].productBatchId = batchId
 
     const productId = updated[index].productId
+    const product = products.find((p) => p.id === productId)
     const batches = productBatches[productId] || []
     const selectedBatch = batches.find((b) => b.id === batchId)
 
     if (selectedBatch) {
       updated[index].batchNumber = selectedBatch.batchNo || ""
       updated[index].expiryDate = selectedBatch.expiryDate ? selectedBatch.expiryDate.split("T")[0] : ""
-      if (selectedBatch.mrp) {
-        // Option to prefill sales rate with MRP if desired, else keep standard product salesRate
+      
+      // Update price based on priority:
+      // 1. selectedBatch.salesRate > 0
+      // 2. selectedBatch.mrp > 0
+      // 3. product.mrp > 0
+      // 4. product.salesRate || 0
+      if (selectedBatch.salesRate && selectedBatch.salesRate > 0) {
+        updated[index].rate = selectedBatch.salesRate
+      } else if (selectedBatch.mrp && selectedBatch.mrp > 0) {
+        updated[index].rate = selectedBatch.mrp
+      } else if (product && product.mrp && product.mrp > 0) {
+        updated[index].rate = product.mrp
+      } else if (product) {
+        updated[index].rate = product.salesRate || 0
       }
     } else {
       updated[index].batchNumber = ""
       updated[index].expiryDate = ""
+      // Fallback to product MRP or sales rate when no batch is selected
+      if (product && product.mrp && product.mrp > 0) {
+        updated[index].rate = product.mrp
+      } else if (product) {
+        updated[index].rate = product.salesRate || 0
+      }
     }
 
-    setItems(updated)
+    calculateLineTotals(updated, index)
   }
 
   // handle generic numeric field update on line item
@@ -829,12 +934,26 @@ export default function CreateSalesInvoice() {
       if (taxProfile) defaultTaxRate = taxProfile.igst
     }
 
+    // Determine initial rate based on:
+    // 1. defaultBatch.salesRate > 0
+    // 2. defaultBatch.mrp > 0
+    // 3. product.mrp > 0
+    // 4. product.salesRate || 0
+    let initialRate = product.salesRate || 0
+    if (defaultBatch && defaultBatch.salesRate && defaultBatch.salesRate > 0) {
+      initialRate = defaultBatch.salesRate
+    } else if (defaultBatch && defaultBatch.mrp && defaultBatch.mrp > 0) {
+      initialRate = defaultBatch.mrp
+    } else if (product.mrp && product.mrp > 0) {
+      initialRate = product.mrp
+    }
+
     const newItem: SalesInvoiceItemDto = {
       productId: product.id || "",
       productName: product.name || "",
       productCode: product.productCode || "",
       qty: 1,
-      rate: product.salesRate || 0,
+      rate: initialRate,
       taxPercentage: defaultTaxRate,
       taxAmount: 0,
       discountPercentage: 0,
@@ -910,6 +1029,34 @@ export default function CreateSalesInvoice() {
   const balanceDue = useMemo(() => {
     return Number((summaries.netAmount - totalPaidAmount).toFixed(2))
   }, [summaries.netAmount, totalPaidAmount])
+
+  // Automatically adjust/clear paid amounts if the net amount decreases or is 0
+  useEffect(() => {
+    const net = summaries.netAmount
+    if (net === 0) {
+      if (currentPaidAmount !== 0) {
+        setCurrentPaidAmount(0)
+      }
+      if (upfrontPayments.length > 0) {
+        setUpfrontPayments([])
+      }
+    } else {
+      const totalSplit = upfrontPayments.reduce((sum, p) => sum + p.paidAmount, 0)
+      if (totalSplit > net) {
+        if (upfrontPayments.length > 0) {
+          setUpfrontPayments([])
+        }
+        if (currentPaidAmount !== 0) {
+          setCurrentPaidAmount(0)
+        }
+      } else {
+        const targetPaid = Math.min(currentPaidAmount, net - totalSplit)
+        if (currentPaidAmount !== targetPaid) {
+          setCurrentPaidAmount(targetPaid)
+        }
+      }
+    }
+  }, [summaries.netAmount, upfrontPayments, currentPaidAmount])
 
   // submit handler
   const handleSave = async (status: number) => {
@@ -1174,10 +1321,24 @@ export default function CreateSalesInvoice() {
                     setCustomerSearchText("")
                   }}
                   onKeyDown={handleCustomerSearchKeyDown}
-                  className="h-9 w-full pr-8 text-xs bg-white dark:bg-zinc-900"
+                  className="h-9 w-full pr-14 text-xs bg-white dark:bg-zinc-900"
                 />
+                {customerId && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setCustomerId("")
+                      setCustomerSearchText("")
+                    }}
+                    className="absolute top-0 right-8 flex h-9 w-8 items-center justify-center text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-300"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
                   className="absolute top-0 right-0 flex h-9 w-8 items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                 >
@@ -1466,25 +1627,121 @@ export default function CreateSalesInvoice() {
 
                         {/* Batch Dropdown */}
                         <TableCell className="px-1.5 py-2">
-                          <select
-                            value={item.productBatchId || ""}
-                            onChange={(e) => handleBatchChange(index, e.target.value)}
-                            disabled={!item.productId || itemBatches.length === 0}
-                            className="h-8 w-full cursor-pointer rounded-md border border-zinc-200 bg-white px-1.5 text-xs text-zinc-900 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
-                          >
-                            <option value="">No Batch (Avl: {getBatchStock(item.productId, null)})</option>
+                          <div className="relative w-full flex items-center">
+                            <input
+                              type="text"
+                              list={`batch-list-${index}`}
+                              placeholder={itemBatches.length === 0 ? "No Batch Available" : "Type / Search Batch..."}
+                              value={item.batchNumber || ""}
+                              onChange={(e) => {
+                                const batchNo = e.target.value
+                                const matchedBatch = itemBatches.find(
+                                  (b) => b.batchNo?.toLowerCase() === batchNo.toLowerCase()
+                                )
+                                if (matchedBatch) {
+                                  handleBatchChange(index, matchedBatch.id || "")
+                                } else {
+                                  const updated = [...items]
+                                  updated[index].batchNumber = batchNo
+                                  updated[index].productBatchId = ""
+                                  updated[index].expiryDate = ""
+                                  // Fallback price when clearing / typing unmatched batch
+                                  const product = products.find((p) => p.id === item.productId)
+                                  if (product && product.mrp && product.mrp > 0) {
+                                    updated[index].rate = product.mrp
+                                  } else if (product) {
+                                    updated[index].rate = product.salesRate || 0
+                                  }
+                                  calculateLineTotals(updated, index)
+                                }
+                              }}
+                              onFocus={(e) => {
+                                e.target.select()
+                              }}
+                              onBlur={(e) => {
+                                setTimeout(() => {
+                                  setItems((currentItems) => {
+                                    const updated = [...currentItems]
+                                    const currentItem = updated[index]
+                                    if (!currentItem || !currentItem.productId) return currentItems
+                                    if (!currentItem.batchNumber) {
+                                      return currentItems
+                                    }
+                                    if (!currentItem.productBatchId) {
+                                      const batches = productBatches[currentItem.productId] || []
+                                      const defaultBatch = batches.length > 0 ? batches[0] : null
+                                      if (defaultBatch) {
+                                        currentItem.productBatchId = defaultBatch.id || ""
+                                        currentItem.batchNumber = defaultBatch.batchNo || ""
+                                        currentItem.expiryDate = defaultBatch.expiryDate ? defaultBatch.expiryDate.split("T")[0] : ""
+                                        
+                                        // Update price:
+                                        if (defaultBatch.mrp && defaultBatch.mrp > 0) {
+                                          currentItem.rate = defaultBatch.mrp
+                                        } else {
+                                          const product = products.find((p) => p.id === currentItem.productId)
+                                          if (product && product.mrp && product.mrp > 0) {
+                                            currentItem.rate = product.mrp
+                                          } else if (product) {
+                                            currentItem.rate = product.salesRate || 0
+                                          }
+                                        }
+                                      }
+                                    } else {
+                                      const batches = productBatches[currentItem.productId] || []
+                                      const originalBatch = batches.find(b => b.id === currentItem.productBatchId)
+                                      if (originalBatch) {
+                                        currentItem.batchNumber = originalBatch.batchNo || ""
+                                      }
+                                    }
+                                    calculateLineTotals(updated, index)
+                                    return updated
+                                  })
+                                }, 150)
+                              }}
+                              disabled={!item.productId || itemBatches.length === 0}
+                              className="h-8 w-full rounded-md border border-zinc-200 bg-white pl-2 pr-7 font-mono text-xs text-zinc-900 focus:outline-hidden disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 appearance-none"
+                            />
+                            {item.batchNumber && (
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  const updated = [...items]
+                                  updated[index].batchNumber = ""
+                                  updated[index].productBatchId = ""
+                                  updated[index].expiryDate = ""
+                                  const product = products.find((p) => p.id === item.productId)
+                                  if (product && product.mrp && product.mrp > 0) {
+                                    updated[index].rate = product.mrp
+                                  } else if (product) {
+                                    updated[index].rate = product.salesRate || 0
+                                  }
+                                  calculateLineTotals(updated, index)
+                                  setItems(updated)
+                                }}
+                                className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-650 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          <datalist id={`batch-list-${index}`}>
                             {itemBatches.map((b) => {
                               const expStr = b.expiryDate
                                 ? new Date(b.expiryDate).toLocaleDateString()
                                 : "No Expiry"
                               const avlQty = getBatchStock(item.productId, b.id || null)
                               return (
-                                <option key={b.id} value={b.id}>
-                                  {b.batchNo} ({expStr} - Avl: {avlQty} - MRP: ₹{b.mrp})
+                                <option
+                                  key={b.id}
+                                  value={b.batchNo}
+                                >
+                                  {`Avl: ${avlQty} • MRP: ₹${b.mrp || 0} • Exp: ${expStr}`}
                                 </option>
                               )
                             })}
-                          </select>
+                          </datalist>
                         </TableCell>
 
                         {/* Expiry Date (Read-Only) */}

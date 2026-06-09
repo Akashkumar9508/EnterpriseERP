@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   PlusCircle,
   Check,
+  X,
 } from "lucide-react"
 import { Page } from "@/components/ui/page"
 import { Section } from "@/components/ui/section"
@@ -39,6 +40,7 @@ import { usePermissions } from "@/hooks/usePermissions"
 import { useAppSelector } from "@/store/hooks"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
+import QuickAddProductDialog from "@/components/QuickAddProductDialog"
 
 import type { ProductDto } from "@/types/ProductDto"
 import type { WarehouseDto } from "@/types/WarehouseDto"
@@ -129,6 +131,7 @@ export default function CreatePurchaseInvoice() {
   const [allBatches, setAllBatches] = useState<ProductBatchDto[]>([])
   const [taxProfiles, setTaxProfiles] = useState<GstDto[]>([])
   const [units, setUnits] = useState<any[]>([])
+  const [inventoryStatus, setInventoryStatus] = useState<any[]>([])
 
   const [isLoadingDeps, setIsLoadingDeps] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -176,6 +179,11 @@ export default function CreatePurchaseInvoice() {
   const [previewHeader, setPreviewHeader] = useState<PreviewHeader | null>(null)
   const [previewItems, setPreviewItems] = useState<PreviewItem[]>([])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+  // Quick product add state
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
+  const [quickAddInitialName, setQuickAddInitialName] = useState("")
+  const [quickAddTargetIndex, setQuickAddTargetIndex] = useState<number | null>(null)
   const [previewUpfrontPayments, setPreviewUpfrontPayments] = useState<
     PaymentDetailItem[]
   >([])
@@ -237,6 +245,34 @@ export default function CreatePurchaseInvoice() {
     previewTotalPaidUpfront,
     previewCurrentPaidAmount,
   ])
+
+  // Automatically adjust/clear preview paid amounts if the preview net amount decreases or is 0
+  useEffect(() => {
+    const net = previewSummary.netAmount
+    if (net === 0) {
+      if (previewCurrentPaidAmount !== 0) {
+        setPreviewCurrentPaidAmount(0)
+      }
+      if (previewUpfrontPayments.length > 0) {
+        setPreviewUpfrontPayments([])
+      }
+    } else {
+      const totalSplit = previewUpfrontPayments.reduce((sum, p) => sum + p.paidAmount, 0)
+      if (totalSplit > net) {
+        if (previewUpfrontPayments.length > 0) {
+          setPreviewUpfrontPayments([])
+        }
+        if (previewCurrentPaidAmount !== 0) {
+          setPreviewCurrentPaidAmount(0)
+        }
+      } else {
+        const targetPaid = Math.min(previewCurrentPaidAmount, net - totalSplit)
+        if (previewCurrentPaidAmount !== targetPaid) {
+          setPreviewCurrentPaidAmount(targetPaid)
+        }
+      }
+    }
+  }, [previewSummary.netAmount, previewUpfrontPayments, previewCurrentPaidAmount])
 
   // Keep previewCurrentPaidAmount in sync with previewRemainingPayable - Removed auto-sync to allow defaulting to unpaid (₹0)
 
@@ -407,15 +443,49 @@ export default function CreatePurchaseInvoice() {
     return () => clearTimeout(delayDebounceFn)
   }, [dialogSearch, selectingProductForIndex])
 
+  // Debounced search for Supplier selection
+  useEffect(() => {
+    const selectedSupplier = suppliers.find(s => s.id === supplierId)
+    if (!isSupplierDropdownOpen && selectedSupplier && selectedSupplier.name === supplierSearchText) {
+      return
+    }
+
+    const delayDebounceFn = setTimeout(() => {
+      const fetchSupplierSearch = async () => {
+        try {
+          const res: any = await axiosClient.get("/Supplier", {
+            params: { search: supplierSearchText, pageNumber: 1, pageSize: 30 }
+          })
+          if (res?.success) {
+            const results = res.data?.items || res.data || []
+            setSuppliers(prev => {
+              const currentSelected = prev.find(s => s.id === supplierId)
+              const merged = [...results]
+              if (currentSelected && !merged.some(s => s.id === supplierId)) {
+                merged.push(currentSelected)
+              }
+              return merged
+            })
+          }
+        } catch (error) {
+          console.error("Failed to search suppliers", error)
+        }
+      }
+      fetchSupplierSearch()
+    }, 300)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [supplierSearchText, isSupplierDropdownOpen, supplierId])
+
   // load dependencies
   useEffect(() => {
     const fetchDeps = async () => {
       setIsLoadingDeps(true)
       try {
-        const [resSup, resWh, resProd, resVar, resBatch, resTax, resUnit] =
+        const [resSup, resWh, resProd, resVar, resBatch, resTax, resUnit, resStock] =
           (await Promise.all([
             axiosClient.get("/Supplier", {
-              params: { pageNumber: 1, pageSize: 10000 },
+              params: { pageNumber: 1, pageSize: 30 },
             }),
             axiosClient.get("/Warehouse", {
               params: { pageNumber: 1, pageSize: 10000 },
@@ -431,6 +501,7 @@ export default function CreatePurchaseInvoice() {
             axiosClient.get("/Unit", {
               params: { pageNumber: 1, pageSize: 10000 },
             }),
+            axiosClient.get("/Inventory/Status"),
           ])) as any[]
 
         if (resSup?.success)
@@ -455,6 +526,8 @@ export default function CreatePurchaseInvoice() {
           setTaxProfiles(resTax.data?.items || resTax.data || [])
         if (resUnit?.success)
           setUnits(resUnit.data?.items || resUnit.data || [])
+        if (resStock?.success)
+          setInventoryStatus(resStock.data || [])
       } catch (e) {
         console.error("Failed to load dependencies", e)
         toast.error("Failed to load dependecy lists.")
@@ -481,6 +554,15 @@ export default function CreatePurchaseInvoice() {
         if (response?.success && response.data) {
           const inv = response.data
           setSupplierId(inv.supplierId || "")
+          if (inv.supplierId) {
+            setSuppliers((prev) => {
+              if (prev.some((s) => s.id === inv.supplierId)) return prev
+              return [
+                ...prev,
+                { id: inv.supplierId, name: inv.supplierName || "Selected Supplier" },
+              ]
+            })
+          }
           setWarehouseId(inv.warehouseId || "")
           setInvoiceNo(inv.invoiceNo || "")
           setReferenceNo(inv.referenceNo || "")
@@ -711,6 +793,10 @@ export default function CreatePurchaseInvoice() {
       [field]: value,
     }
 
+    if (field === "mrp") {
+      updated[index].salesRate = value
+    }
+
     calculateLineTotals(updated, index)
   }
 
@@ -845,6 +931,20 @@ export default function CreatePurchaseInvoice() {
     }, 100)
   }
 
+  const handleQuickAddSuccess = (newProduct: ProductDto) => {
+    setProducts((prev) => {
+      if (prev.some((item) => item.id === newProduct.id)) return prev
+      return [...prev, newProduct]
+    })
+
+    if (quickAddTargetIndex !== null) {
+      handleProductChange(quickAddTargetIndex, newProduct.id || "")
+      setSelectingProductForIndex(null)
+    } else {
+      handleSelectQuickAddProduct(newProduct)
+    }
+  }
+
   // global summaries
   const summaries = useMemo(() => {
     let subTotal = 0
@@ -888,6 +988,34 @@ export default function CreatePurchaseInvoice() {
   const balanceDue = useMemo(() => {
     return Number((summaries.netAmount - totalPaidAmount).toFixed(2))
   }, [summaries.netAmount, totalPaidAmount])
+
+  // Automatically adjust/clear paid amounts if the net amount decreases or is 0
+  useEffect(() => {
+    const net = summaries.netAmount
+    if (net === 0) {
+      if (currentPaidAmount !== 0) {
+        setCurrentPaidAmount(0)
+      }
+      if (upfrontPayments.length > 0) {
+        setUpfrontPayments([])
+      }
+    } else {
+      const totalSplit = upfrontPayments.reduce((sum, p) => sum + p.paidAmount, 0)
+      if (totalSplit > net) {
+        if (upfrontPayments.length > 0) {
+          setUpfrontPayments([])
+        }
+        if (currentPaidAmount !== 0) {
+          setCurrentPaidAmount(0)
+        }
+      } else {
+        const targetPaid = Math.min(currentPaidAmount, net - totalSplit)
+        if (currentPaidAmount !== targetPaid) {
+          setCurrentPaidAmount(targetPaid)
+        }
+      }
+    }
+  }, [summaries.netAmount, upfrontPayments, currentPaidAmount])
 
   // Keep currentPaidAmount in sync with remainingPayable - Removed auto-sync to allow defaulting to unpaid (₹0)
 
@@ -1031,6 +1159,17 @@ export default function CreatePurchaseInvoice() {
 
   const getBatchesForProduct = (productId: string) => {
     return allBatches.filter((b) => b.productId === productId)
+  }
+
+  const getBatchStock = (productId: string, batchId: string | null) => {
+    if (!warehouseId) return 0
+    const match = inventoryStatus.find(
+      (inv: any) =>
+        inv.productId === productId &&
+        inv.warehouseId === warehouseId &&
+        (batchId ? inv.productBatchId === batchId : !inv.productBatchId)
+    )
+    return match ? match.currentStock : 0
   }
 
   const getRowValue = (row: any, searchTerms: string[]) => {
@@ -1822,12 +1961,15 @@ export default function CreatePurchaseInvoice() {
     } else if (field === "productBatchId") {
       updatedItems[index].productBatchId = value
       const batch = allBatches.find((b) => b.id === value)
+      const prod = products.find((p) => p.id === updatedItems[index].productId)
       if (batch) {
         updatedItems[index].batchNumber = batch.batchNo || ""
         updatedItems[index].expiryDate = batch.expiryDate
           ? batch.expiryDate.split("T")[0]
           : ""
-        updatedItems[index].mrp = batch.mrp || updatedItems[index].mrp
+        updatedItems[index].mrp = batch.mrp || prod?.mrp || updatedItems[index].mrp || 0
+        updatedItems[index].salesRate = batch.salesRate || batch.mrp || prod?.salesRate || updatedItems[index].salesRate || 0
+        updatedItems[index].purchaseRate = batch.purchaseRate || prod?.purchaseRate || updatedItems[index].purchaseRate || 0
       }
     } else {
       updatedItems[index] = {
@@ -1841,15 +1983,20 @@ export default function CreatePurchaseInvoice() {
             b.productId === updatedItems[index].productId &&
             b.batchNo?.toLowerCase() === typedBatchNo.toLowerCase()
         )
+        const prod = products.find((p) => p.id === updatedItems[index].productId)
         if (matched) {
           updatedItems[index].productBatchId = matched.id || ""
           updatedItems[index].expiryDate = matched.expiryDate
             ? matched.expiryDate.split("T")[0]
             : ""
-          updatedItems[index].mrp = matched.mrp || updatedItems[index].mrp
+          updatedItems[index].mrp = matched.mrp || prod?.mrp || updatedItems[index].mrp || 0
+          updatedItems[index].salesRate = matched.salesRate || matched.mrp || prod?.salesRate || updatedItems[index].salesRate || 0
+          updatedItems[index].purchaseRate = matched.purchaseRate || prod?.purchaseRate || updatedItems[index].purchaseRate || 0
         } else {
           updatedItems[index].productBatchId = ""
         }
+      } else if (field === "mrp") {
+        updatedItems[index].salesRate = value
       }
     }
 
@@ -2229,10 +2376,24 @@ export default function CreatePurchaseInvoice() {
                       setSupplierSearchText("")
                     }}
                     onKeyDown={handleSupplierSearchKeyDown}
-                    className="h-9 w-full pr-8 text-xs bg-white dark:bg-zinc-900"
+                    className="h-9 w-full pr-14 text-xs bg-white dark:bg-zinc-900"
                   />
+                  {supplierId && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setSupplierId("")
+                        setSupplierSearchText("")
+                      }}
+                      className="absolute top-0 right-8 flex h-9 w-8 items-center justify-center text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-300"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setIsSupplierDropdownOpen(!isSupplierDropdownOpen)}
                     className="absolute top-0 right-0 flex h-9 w-8 items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                   >
@@ -2397,15 +2558,45 @@ export default function CreatePurchaseInvoice() {
                       ))}
                     </div>
                   )}
+                  {quickSearchText.trim() && quickSearchResults.length === 0 && !isQuickSearching && (
+                    <div className="absolute left-0 right-0 z-50 mt-1 rounded-md border border-zinc-200 bg-white p-2.5 text-center shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+                      <div className="text-xs text-muted-foreground mb-2">No products found for "{quickSearchText}"</div>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setQuickAddInitialName(quickSearchText)
+                          setQuickAddTargetIndex(null)
+                          setIsQuickAddOpen(true)
+                        }}
+                        className="h-7 w-full text-[10px] bg-indigo-600 text-white hover:bg-indigo-700"
+                      >
+                        + Quick Add "{quickSearchText}"
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
-              <Button
-                type="button"
-                onClick={addLineItem}
-                className="h-8 gap-1 py-1 text-xs shrink-0 self-end sm:self-auto"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add Blank Row
-              </Button>
+              <div className="flex gap-2 shrink-0 self-end sm:self-auto">
+                <Button
+                  type="button"
+                  onClick={addLineItem}
+                  className="h-8 gap-1 py-1 text-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add Blank Row
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setQuickAddInitialName("")
+                    setQuickAddTargetIndex(null)
+                    setIsQuickAddOpen(true)
+                  }}
+                  variant="outline"
+                  className="h-8 gap-1 py-1 text-xs border-indigo-200 text-indigo-650 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Quick Add Product
+                </Button>
+              </div>
             </div>{" "}
             <div className="w-full overflow-x-auto">
               <Table className="min-w-[1100px]">
@@ -2539,41 +2730,97 @@ export default function CreatePurchaseInvoice() {
                             </select>
                           </TableCell>
                           <TableCell className="px-1.5 py-2">
-                            <input
-                              type="text"
-                              list={`batch-list-${index}`}
-                              placeholder="Batch No..."
-                              value={item.batchNumber || ""}
-                              onChange={(e) => {
-                                const batchNo = e.target.value
-                                const updated = [...items]
-                                updated[index].batchNumber = batchNo
-                                const matchedBatch = prodBatches.find(
-                                  (b) =>
-                                    b.batchNo?.toLowerCase() ===
-                                    batchNo.toLowerCase()
-                                )
-                                if (matchedBatch) {
-                                  updated[index].productBatchId =
-                                    matchedBatch.id
-                                  updated[index].expiryDate =
-                                    matchedBatch.expiryDate
-                                      ? matchedBatch.expiryDate.split("T")[0]
-                                      : ""
-                                  updated[index].mrp =
-                                    matchedBatch.mrp || updated[index].mrp
-                                } else {
-                                  updated[index].productBatchId = undefined
-                                }
-                                setItems(updated)
-                              }}
-                              disabled={!item.productId}
-                              className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 font-mono text-xs text-zinc-900 focus:outline-hidden disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
-                            />
+                            <div className="relative w-full flex items-center">
+                              <input
+                                type="text"
+                                list={`batch-list-${index}`}
+                                placeholder="Batch No..."
+                                value={item.batchNumber || ""}
+                                onChange={(e) => {
+                                  const batchNo = e.target.value
+                                  const updated = [...items]
+                                  updated[index].batchNumber = batchNo
+                                  const matchedBatch = prodBatches.find(
+                                    (b) =>
+                                      b.batchNo?.toLowerCase() ===
+                                      batchNo.toLowerCase()
+                                  )
+                                  if (matchedBatch) {
+                                    updated[index].productBatchId =
+                                      matchedBatch.id
+                                    updated[index].expiryDate =
+                                      matchedBatch.expiryDate
+                                        ? matchedBatch.expiryDate.split("T")[0]
+                                        : ""
+                                    updated[index].mrp =
+                                      matchedBatch.mrp || selectedProduct?.mrp || updated[index].mrp || 0
+                                    updated[index].salesRate =
+                                      matchedBatch.salesRate || matchedBatch.mrp || selectedProduct?.salesRate || updated[index].salesRate || 0
+                                    updated[index].purchaseRate =
+                                      matchedBatch.purchaseRate || selectedProduct?.purchaseRate || updated[index].purchaseRate || 0
+                                  } else {
+                                    updated[index].productBatchId = undefined
+                                  }
+                                  calculateLineTotals(updated, index)
+                                }}
+                                onFocus={(e) => {
+                                  e.target.select()
+                                }}
+                                onBlur={(e) => {
+                                  setTimeout(() => {
+                                    setItems((currentItems) => {
+                                      const updated = [...currentItems]
+                                      const currentItem = updated[index]
+                                      if (!currentItem || !currentItem.productId) return currentItems
+                                      if (!currentItem.batchNumber && currentItem.productBatchId) {
+                                        const matched = prodBatches.find(b => b.id === currentItem.productBatchId)
+                                        if (matched) {
+                                          currentItem.batchNumber = matched.batchNo || ""
+                                        }
+                                      }
+                                      return updated
+                                    })
+                                  }, 150)
+                                }}
+                                disabled={!item.productId}
+                                className="h-8 w-full rounded-md border border-zinc-200 bg-white pl-2 pr-7 font-mono text-xs text-zinc-900 focus:outline-hidden disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 appearance-none"
+                              />
+                              {item.batchNumber && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    const updated = [...items]
+                                    updated[index].batchNumber = ""
+                                    updated[index].productBatchId = undefined
+                                    updated[index].expiryDate = ""
+                                    updated[index].purchaseRate = selectedProduct?.purchaseRate || updated[index].purchaseRate || 0
+                                    updated[index].mrp = selectedProduct?.mrp || updated[index].mrp || 0
+                                    updated[index].salesRate = selectedProduct?.salesRate || selectedProduct?.mrp || updated[index].salesRate || 0
+                                    calculateLineTotals(updated, index)
+                                    setItems(updated)
+                                  }}
+                                  className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-650 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
                             <datalist id={`batch-list-${index}`}>
-                              {prodBatches.map((b) => (
-                                <option key={b.id} value={b.batchNo} />
-                              ))}
+                              {prodBatches.map((b) => {
+                                const expStr = b.expiryDate
+                                  ? new Date(b.expiryDate).toLocaleDateString()
+                                  : "No Expiry"
+                                const avlQty = getBatchStock(item.productId, b.id || null)
+                                return (
+                                  <option
+                                    key={b.id}
+                                    value={b.batchNo}
+                                  >
+                                    {`Avl: ${avlQty} • MRP: ₹${b.mrp || 0} • Exp: ${expStr}`}
+                                  </option>
+                                )
+                              })}
                             </datalist>
                           </TableCell>
                           <TableCell className="px-1.5 py-2">
@@ -3113,7 +3360,23 @@ export default function CreatePurchaseInvoice() {
                 {!isSearchingProducts && lookupProducts.length === 0 && (
                   <tr>
                     <td colSpan={3} className="p-6 text-center text-zinc-400">
-                      No products match your search.
+                      <div>No products match your search.</div>
+                      {dialogSearch.trim() && (
+                        <div className="mt-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setQuickAddInitialName(dialogSearch)
+                              setQuickAddTargetIndex(selectingProductForIndex)
+                              setIsQuickAddOpen(true)
+                            }}
+                            className="bg-indigo-600 text-white hover:bg-indigo-700 h-7 text-[11px]"
+                          >
+                            + Quick Add "{dialogSearch}"
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -3121,7 +3384,19 @@ export default function CreatePurchaseInvoice() {
             </table>
           </div>
 
-          <DialogFooter className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+          <DialogFooter className="border-t border-zinc-100 pt-3 dark:border-zinc-800 flex justify-between items-center w-full">
+            <Button
+              variant="outline"
+              type="button"
+              className="h-8 px-3 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20"
+              onClick={() => {
+                setQuickAddInitialName(dialogSearch)
+                setQuickAddTargetIndex(selectingProductForIndex)
+                setIsQuickAddOpen(true)
+              }}
+            >
+              + Quick Add Product
+            </Button>
             <Button
               variant="outline"
               type="button"
@@ -3771,9 +4046,20 @@ export default function CreatePurchaseInvoice() {
                                       }`}
                                     />
                                     <datalist id={`preview-batch-list-${idx}`}>
-                                      {itemBatches.map((b) => (
-                                        <option key={b.id} value={b.batchNo} />
-                                      ))}
+                                      {itemBatches.map((b) => {
+                                        const expStr = b.expiryDate
+                                          ? new Date(b.expiryDate).toLocaleDateString()
+                                          : "No Expiry"
+                                        const avlQty = getBatchStock(item.productId, b.id || null)
+                                        return (
+                                          <option
+                                            key={b.id}
+                                            value={b.batchNo}
+                                          >
+                                            {`Avl: ${avlQty} • MRP: ₹${b.mrp || 0} • Exp: ${expStr}`}
+                                          </option>
+                                        )
+                                      })}
                                     </datalist>
                                   </div>
                                   <input
@@ -3980,6 +4266,12 @@ export default function CreatePurchaseInvoice() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <QuickAddProductDialog
+        isOpen={isQuickAddOpen}
+        onClose={() => setIsQuickAddOpen(false)}
+        onSuccess={handleQuickAddSuccess}
+        initialName={quickAddInitialName}
+      />
     </Page>
   )
 }

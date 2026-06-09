@@ -55,6 +55,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useAppSelector } from '@/store/hooks';
 import { toast } from 'sonner';
 import { generatePurchaseOrderPdf } from '@/utils/purchaseOrderPdf';
+import QuickAddProductDialog from '@/components/QuickAddProductDialog';
 
 import type { PurchaseOrderDto, PurchaseOrderItemDto, LowStockProductDto } from '@/types/PurchaseOrderDto';
 import type { WarehouseDto } from '@/types/WarehouseDto';
@@ -107,6 +108,11 @@ export default function ManagePurchaseOrder() {
   const [productSearchText, setProductSearchText] = useState('');
   const [lookupProducts, setLookupProducts] = useState<ProductDto[]>([]);
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+
+  // Quick product add state
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [quickAddInitialName, setQuickAddInitialName] = useState("");
+  const [quickAddTargetIndex, setQuickAddTargetIndex] = useState<number | null>(null);
 
   const fetchOrders = async () => {
     if (!user?.companyId) return;
@@ -329,6 +335,12 @@ export default function ManagePurchaseOrder() {
     });
     setFormItems(updated);
     setSelectingProductForIndex(null);
+  };
+
+  const handleQuickAddSuccess = (newProduct: ProductDto) => {
+    if (quickAddTargetIndex !== null) {
+      handleProductSelect(quickAddTargetIndex, newProduct);
+    }
   };
 
   const handleQtyChange = (index: number, qty: number) => {
@@ -958,10 +970,48 @@ Thank you!`);
               )}
               {!isSearchingProducts && lookupProducts.length === 0 && (
                 <div className="text-center py-6 text-muted-foreground">
-                  No products found.
+                  <div>No products found.</div>
+                  {productSearchText.trim() && (
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setQuickAddInitialName(productSearchText);
+                          setQuickAddTargetIndex(selectingProductForIndex);
+                          setIsQuickAddOpen(true);
+                        }}
+                        className="bg-indigo-600 text-white hover:bg-indigo-700 h-7 text-[11px]"
+                      >
+                        + Quick Add "{productSearchText}"
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+            <DialogFooter className="border-t border-zinc-100 pt-3 dark:border-zinc-800 flex justify-between items-center w-full">
+              <Button
+                variant="outline"
+                type="button"
+                className="h-8 px-3 text-xs border-indigo-200 text-indigo-650 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20"
+                onClick={() => {
+                  setQuickAddInitialName(productSearchText);
+                  setQuickAddTargetIndex(selectingProductForIndex);
+                  setIsQuickAddOpen(true);
+                }}
+              >
+                + Quick Add Product
+              </Button>
+              <Button
+                variant="outline"
+                type="button"
+                className="h-8 px-3 text-xs"
+                onClick={() => setSelectingProductForIndex(null)}
+              >
+                Cancel
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </Page>
@@ -1487,6 +1537,12 @@ Thank you!`);
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <QuickAddProductDialog
+      isOpen={isQuickAddOpen}
+      onClose={() => setIsQuickAddOpen(false)}
+      onSuccess={handleQuickAddSuccess}
+      initialName={quickAddInitialName}
+    />
   </Page>
 );
 }
