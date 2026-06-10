@@ -652,8 +652,8 @@ export default function CreateSalesInvoice() {
   }
 
   // handle product selection change
-  const handleProductChange = async (index: number, prodId: string) => {
-    const product = products.find((p) => p.id === prodId)
+  const handleProductChange = async (index: number, prodId: string, productObj?: ProductDto) => {
+    const product = productObj || products.find((p) => p.id === prodId)
     if (!product) return
 
     // Load batches sorted by nearest expiry
@@ -2179,7 +2179,7 @@ export default function CreateSalesInvoice() {
                               if (prev.some((item) => item.id === p.id)) return prev;
                               return [...prev, p];
                             });
-                            handleProductChange(selectingProductForIndex, p.id || "")
+                            handleProductChange(selectingProductForIndex, p.id || "", p)
                             setSelectingProductForIndex(null)
                           }
                         }}

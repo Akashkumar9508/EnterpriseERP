@@ -686,8 +686,8 @@ export default function CreatePurchaseInvoice() {
   }
 
   // handle product selection change
-  const handleProductChange = (index: number, prodId: string) => {
-    const product = products.find((p) => p.id === prodId)
+  const handleProductChange = (index: number, prodId: string, productObj?: ProductDto) => {
+    const product = productObj || products.find((p) => p.id === prodId)
     if (!product) return
 
     // lookup default tax rate
@@ -938,7 +938,7 @@ export default function CreatePurchaseInvoice() {
     })
 
     if (quickAddTargetIndex !== null) {
-      handleProductChange(quickAddTargetIndex, newProduct.id || "")
+      handleProductChange(quickAddTargetIndex, newProduct.id || "", newProduct)
       setSelectingProductForIndex(null)
     } else {
       handleSelectQuickAddProduct(newProduct)
@@ -3326,7 +3326,8 @@ export default function CreatePurchaseInvoice() {
                           });
                           handleProductChange(
                             selectingProductForIndex,
-                            p.id || ""
+                            p.id || "",
+                            p
                           )
                           setSelectingProductForIndex(null)
                         }

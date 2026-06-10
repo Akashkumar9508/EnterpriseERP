@@ -10,17 +10,25 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FormField } from "@/components/ui/form-field"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Plus, Sparkles, Tag, Layers, Percent, Settings2 } from "lucide-react"
+import { Loader2, Plus, Sparkles, Tag, Layers, Percent, Settings2, Trash2, Scale } from "lucide-react"
 import axiosClient from "@/Services/axiosClient"
 import { useAppSelector } from "@/store/hooks"
 import { toast } from "sonner"
-import type { ProductDto } from "@/types/ProductDto"
+import type { ProductDto, ProductUnitConversionDto } from "@/types/ProductDto"
 import type { CategoryDto } from "@/types/CategoryDto"
 import type { BrandDto } from "@/types/BrandDto"
 import type { ManufacturerDto } from "@/types/ManufacturerDto"
 import type { HSNCodeDto } from "@/types/HSNCodeDto"
 import type { GstDto } from "@/types/GstDto"
 import type { UnitDto } from "@/types/UnitDto"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 interface QuickAddProductDialogProps {
   isOpen: boolean
@@ -68,6 +76,14 @@ export default function QuickAddProductDialog({
   const [mrp, setMrp] = useState<number>(0)
   const [isActive, setIsActive] = useState(true)
 
+  // Unit Conversion State
+  const [alternativeUnits, setAlternativeUnits] = useState<ProductUnitConversionDto[]>([])
+  const [newAltUnitId, setNewAltUnitId] = useState("")
+  const [newConversionFactor, setNewConversionFactor] = useState("")
+  const [newSalesRate, setNewSalesRate] = useState("")
+  const [newPurchaseRate, setNewPurchaseRate] = useState("")
+  const [newMrp, setNewMrp] = useState("")
+
   // Sync initialName when it changes or modal opens
   useEffect(() => {
     if (isOpen) {
@@ -77,6 +93,14 @@ export default function QuickAddProductDialog({
       setBarcode("")
       setSku("")
       setAutoSku(true)
+
+      // Reset Unit Conversion
+      setAlternativeUnits([])
+      setNewAltUnitId("")
+      setNewConversionFactor("")
+      setNewSalesRate("")
+      setNewPurchaseRate("")
+      setNewMrp("")
     }
   }, [initialName, isOpen])
 
@@ -152,6 +176,63 @@ export default function QuickAddProductDialog({
     toast.success("Barcode generated successfully!")
   }
 
+  const handleAddConversion = () => {
+    if (!newAltUnitId) {
+      toast.error("Please select an alternative unit.")
+      return
+    }
+    const factor = parseFloat(newConversionFactor)
+    if (isNaN(factor) || factor <= 0) {
+      toast.error("Please enter a valid conversion factor greater than 0.")
+      return
+    }
+    
+    if (!unitId) {
+      toast.error("Please select a Base Unit first.")
+      return
+    }
+
+    if (newAltUnitId === unitId) {
+      toast.error("Alternative unit cannot be the same as the base unit.")
+      return
+    }
+
+    if (alternativeUnits.some((c) => c.alternativeUnitId === newAltUnitId)) {
+      toast.error("A conversion rule already exists for this alternative unit.")
+      return
+    }
+
+    const altUnit = units.find((u) => u.id === newAltUnitId)
+    const baseUnit = units.find((u) => u.id === unitId)
+
+    const newConv: ProductUnitConversionDto = {
+      alternativeUnitId: newAltUnitId,
+      alternativeUnitName: altUnit?.name || "",
+      alternativeUnitSymbol: altUnit?.symbol || "",
+      baseUnitId: unitId,
+      baseUnitName: baseUnit?.name || "",
+      baseUnitSymbol: baseUnit?.symbol || "",
+      conversionFactor: factor,
+      salesRate: newSalesRate ? parseFloat(newSalesRate) : undefined,
+      purchaseRate: newPurchaseRate ? parseFloat(newPurchaseRate) : undefined,
+      mrp: newMrp ? parseFloat(newMrp) : undefined,
+    }
+
+    setAlternativeUnits([...alternativeUnits, newConv])
+    
+    setNewAltUnitId("")
+    setNewConversionFactor("")
+    setNewSalesRate("")
+    setNewPurchaseRate("")
+    setNewMrp("")
+    toast.success("Conversion rule added successfully.")
+  }
+
+  const handleRemoveConversion = (index: number) => {
+    setAlternativeUnits(alternativeUnits.filter((_, i) => i !== index))
+    toast.info("Conversion rule removed.")
+  }
+
   // Handle Save
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -207,6 +288,7 @@ export default function QuickAddProductDialog({
         salesRate: Number(salesRate) || 0,
         mrp: Number(mrp) || 0,
         isActive,
+        alternativeUnits,
       }
 
       const response: any = await axiosClient.post("/Product", payload)
@@ -222,6 +304,13 @@ export default function QuickAddProductDialog({
           categoryName: categories.find((c) => c.id === categoryId)?.name,
           brandName: brands.find((b) => b.id === brandId)?.name,
           taxProfileName: taxProfiles.find((t) => t.id === taxProfileId)?.name,
+          alternativeUnits: alternativeUnits.map((alt) => ({
+            ...alt,
+            alternativeUnitName: alt.alternativeUnitName || units.find((u) => u.id === alt.alternativeUnitId)?.name,
+            alternativeUnitSymbol: alt.alternativeUnitSymbol || units.find((u) => u.id === alt.alternativeUnitId)?.symbol,
+            baseUnitName: alt.baseUnitName || units.find((u) => u.id === alt.baseUnitId)?.name,
+            baseUnitSymbol: alt.baseUnitSymbol || units.find((u) => u.id === alt.baseUnitId)?.symbol,
+          })),
         }
 
         onSuccess(createdProduct)
@@ -525,6 +614,135 @@ export default function QuickAddProductDialog({
                   disabled={!trackInventory}
                   className="bg-zinc-900 border-zinc-800 text-zinc-100 h-9 font-mono disabled:opacity-40"
                 />
+              </div>
+            </div>
+
+            {/* Unit Conversions Section */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5 border-b border-zinc-900 pb-1">
+                <Scale className="h-3.5 w-3.5" /> Unit Conversions
+              </h3>
+              <div className="bg-zinc-900/50 p-4 border border-zinc-900 rounded-lg space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">Alternative Unit</label>
+                    <select
+                      value={newAltUnitId}
+                      onChange={(e) => setNewAltUnitId(e.target.value)}
+                      className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+                    >
+                      <option value="">Select Alt Unit...</option>
+                      {units.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">Conversion Factor (Multiplier)</label>
+                    <Input
+                      type="number"
+                      placeholder="e.g. 10"
+                      value={newConversionFactor}
+                      onChange={(e) => setNewConversionFactor(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800 text-zinc-100 h-9 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">Sales Rate Override (₹, Optional)</label>
+                    <Input
+                      type="number"
+                      placeholder="Override rate"
+                      value={newSalesRate}
+                      onChange={(e) => setNewSalesRate(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800 text-zinc-100 h-9 font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">Purchase Rate Override (₹, Optional)</label>
+                    <Input
+                      type="number"
+                      placeholder="Override rate"
+                      value={newPurchaseRate}
+                      onChange={(e) => setNewPurchaseRate(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800 text-zinc-100 h-9 font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-zinc-400">MRP Override (₹, Optional)</label>
+                    <Input
+                      type="number"
+                      placeholder="Override MRP"
+                      value={newMrp}
+                      onChange={(e) => setNewMrp(e.target.value)}
+                      className="bg-zinc-900 border-zinc-800 text-zinc-100 h-9 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleAddConversion}
+                  className="w-full text-xs h-9 bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600/20 border border-indigo-500/20"
+                >
+                  Add Conversion Rule
+                </Button>
+
+                {/* Rules Table */}
+                {alternativeUnits.length > 0 && (
+                  <div className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950 mt-4">
+                    <Table>
+                      <TableHeader className="bg-zinc-900/40">
+                        <TableRow className="border-zinc-800 hover:bg-transparent">
+                          <TableHead className="text-zinc-400 text-xs py-2">Alt Unit</TableHead>
+                          <TableHead className="text-zinc-400 text-xs py-2">Factor</TableHead>
+                          <TableHead className="text-zinc-400 text-xs py-2 text-right">Sales Rate</TableHead>
+                          <TableHead className="text-zinc-400 text-xs py-2 text-right">Purchase Rate</TableHead>
+                          <TableHead className="text-zinc-400 text-xs py-2 text-right">MRP</TableHead>
+                          <TableHead className="w-[50px] py-2"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {alternativeUnits.map((conv, idx) => (
+                          <TableRow key={idx} className="border-zinc-800 hover:bg-zinc-900/20 text-xs">
+                            <TableCell className="font-semibold text-zinc-200 py-2">
+                              {conv.alternativeUnitName || units.find((u) => u.id === conv.alternativeUnitId)?.name} (
+                              {conv.alternativeUnitSymbol || units.find((u) => u.id === conv.alternativeUnitId)?.symbol})
+                            </TableCell>
+                            <TableCell className="font-mono text-zinc-300 py-2">
+                              1 Alt Unit = {conv.conversionFactor} Base Units
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-zinc-300 py-2">
+                              {conv.salesRate !== undefined && conv.salesRate !== null ? `₹${Number(conv.salesRate).toFixed(2)}` : "Calculated"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-zinc-300 py-2">
+                              {conv.purchaseRate !== undefined && conv.purchaseRate !== null ? `₹${Number(conv.purchaseRate).toFixed(2)}` : "Calculated"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-zinc-300 py-2">
+                              {conv.mrp !== undefined && conv.mrp !== null ? `₹${Number(conv.mrp).toFixed(2)}` : "Calculated"}
+                            </TableCell>
+                            <TableCell className="py-2 text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                onClick={() => handleRemoveConversion(idx)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             </div>
 
