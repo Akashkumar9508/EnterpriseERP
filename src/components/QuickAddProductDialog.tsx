@@ -74,7 +74,7 @@ export default function QuickAddProductDialog({
   const [purchaseRate, setPurchaseRate] = useState<number>(0)
   const [salesRate, setSalesRate] = useState<number>(0)
   const [mrp, setMrp] = useState<number>(0)
-  const [isActive, setIsActive] = useState(true)
+  const [isActive] = useState(true)
 
   // Unit Conversion State
   const [alternativeUnits, setAlternativeUnits] = useState<ProductUnitConversionDto[]>([])

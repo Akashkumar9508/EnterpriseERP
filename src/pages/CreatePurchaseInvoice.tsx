@@ -559,7 +559,12 @@ export default function CreatePurchaseInvoice() {
               if (prev.some((s) => s.id === inv.supplierId)) return prev
               return [
                 ...prev,
-                { id: inv.supplierId, name: inv.supplierName || "Selected Supplier" },
+                {
+                  id: inv.supplierId,
+                  name: inv.supplierName || "Selected Supplier",
+                  companyId: "",
+                  branchId: "",
+                } as SupplierDto,
               ]
             })
           }
@@ -2766,7 +2771,7 @@ export default function CreatePurchaseInvoice() {
                                 onFocus={(e) => {
                                   e.target.select()
                                 }}
-                                onBlur={(e) => {
+                                onBlur={() => {
                                   setTimeout(() => {
                                     setItems((currentItems) => {
                                       const updated = [...currentItems]
