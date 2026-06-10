@@ -173,4 +173,9 @@ input[type=number] {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* Hide native datalist picker dropdown indicators */
+input[list]::-webkit-calendar-picker-indicator {
+  display: none !important;
 }
