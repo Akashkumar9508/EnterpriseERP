@@ -499,7 +499,12 @@ export default function CreateSalesInvoice() {
               if (prev.some((c) => c.id === inv.customerId)) return prev
               return [
                 ...prev,
-                { id: inv.customerId, name: inv.customerName || "Selected Customer" },
+                {
+                  id: inv.customerId,
+                  name: inv.customerName || "Selected Customer",
+                  companyId: "",
+                  branchId: "",
+                } as CustomerDto,
               ]
             })
           }
@@ -1658,7 +1663,7 @@ export default function CreateSalesInvoice() {
                               onFocus={(e) => {
                                 e.target.select()
                               }}
-                              onBlur={(e) => {
+                              onBlur={() => {
                                 setTimeout(() => {
                                   setItems((currentItems) => {
                                     const updated = [...currentItems]
